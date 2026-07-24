@@ -1,17 +1,29 @@
-# adytum-alchemist-ai-workflow
+<!-- xonettn -->
+<div align="center">
+
+# 🤖 Adytum Alchemist Ai Workflow
 
 A BOTA Tarot-inspired AI guide for progressing through the 22 Major Arcana keys.
 
-## Overview
+
+![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB) ![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white) ![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white) ![Netlify](https://img.shields.io/badge/Netlify-00C7B7?logo=netlify&logoColor=white)
+
+![Deploy](https://img.shields.io/badge/Deployed-Netlify-00C7B7?logo=netlify&logoColor=white)
+
+</div>
+
+---
+
+## 📋 Overview
 A BOTA Tarot-inspired AI guide for progressing through the 22 Major Arcana keys.
 
-## Tech Stack
+## 📦 Tech Stack
 - React
 - Vite
 - Express
 - Netlify (deployed)
 
-## Project Structure
+## 🗂️ Project Structure
 ```
 adytum-alchemist-ai-workflow/
   - public
@@ -19,37 +31,37 @@ adytum-alchemist-ai-workflow/
   (47 files total)
 ```
 
-## Getting Started
+## 🚀 Getting Started
 
-### Prerequisites
+### 📋 Prerequisites
 - Node.js (v18+)
 - npm or yarn
 
-### Installation
+### 📦 Installation
 ```bash
 git clone https://github.com/1nc0gn30/adytum-alchemist-ai-workflow.git
 cd adytum-alchemist-ai-workflow
 npm install
 ```
 
-### Development
+### 💻 Development
 ```bash
 npm run dev
 ```
 
-### Build
+### 🔨 Build
 ```bash
 npm run build
 ```
 
-### Available Scripts
+### ⚙️ Available Scripts
   npm run dev - vite --port=3000 --host=0.0.0.0
   npm run build - vite build
   npm run preview - vite preview
   npm run clean - rm -rf dist
   npm run lint - tsc --noEmit
 
-## Original README
+## 📂 Original README
 <details>
 <summary>Click to expand original README</summary>
 
@@ -65,13 +77,13 @@ A dark UI tarot initiation app that guides the user from Key 0 to Key 21 with st
 - Stores provider config and session progress in local browser storage
 - Loads canonical tarot reference data from `public/tarot/info.txt`
 
-## Tech Stack
+## 📦 Tech Stack
 
 - Vite + React + TypeScript
 - Tailwind-based component styling
 - Netlify-ready static deployment (`dist/`)
 
-## Local Development
+## 💻 Local Development
 
 1. Install dependencies:
    `npm install`
@@ -80,14 +92,14 @@ A dark UI tarot initiation app that guides the user from Key 0 to Key 21 with st
 3. Run the app:
    `npm run dev`
 
-## Build and Validation
+## 🔨 Build and Validation
 
 - Type check:
   `npm run lint`
 - Production build:
   `npm run build`
 
-## Deployment Notes (Netlify)
+## 🚀 Deployment Notes (Netlify)
 
 - Netlify build command: `npm run build`
 - Publish directory: `dist`
@@ -100,20 +112,20 @@ A dark UI tarot initiation app that guides the user from Key 0 to Key 21 with st
 
 See `.env.example` for optional variables used by providers.
 
-## Project Structure
+## 🗂️ Project Structure
 
 - `src/App.tsx`: main UI, provider requests, initiation workflow
 - `public/tarot/`: tarot card images and canonical text source
 - `index.html`: page metadata, canonical, OG/Twitter tags
 - `netlify.toml`: Netlify build + processing configuration
 
-## Author
+## 👤 Author
 
 Neal Frazier
 
 </details>
 
-## TODO / Roadmap
+## 📝 TODO / Roadmap
 - [ ] Add unit tests
 - [ ] Add LICENSE file
 - [ ] Add Dockerfile for containerized deployment
@@ -125,14 +137,22 @@ Neal Frazier
 - [ ] Update dependencies to latest versions
 - [ ] Add code comments and inline documentation
 
-## Deployment
+## 🚀 Deployment
 This project is deployed on Netlify. See netlify.toml for configuration.
 
-## Author
+## 👤 Author
 **Neal Frazier** - [@AshAmplifies](https://github.com/1nc0gn30)
 
-## Links
+## 🔗 Links
 - GitHub: https://github.com/1nc0gn30/adytum-alchemist-ai-workflow
 
 ---
 *This README was enhanced as part of the neals-projects-2026 batch update.*
+
+---
+
+<div align="center">
+
+**[xonettn]** · Built by [Neal Frazier](https://github.com/1nc0gn30) · [@AshAmplifies](https://twitter.com/AshAmplifies)
+
+</div>
