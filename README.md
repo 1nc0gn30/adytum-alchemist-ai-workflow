@@ -1,3 +1,9 @@
+<div align="center">
+  <img src="assets/hero-banner.svg" alt="Adytum Alchemist Ai Workflow — Sovereign Architecture Banner" width="100%" />
+</div>
+
+<br />
+
 # ⚡ Adytum Alchemist AI Workflow
 
 <p align="center">
