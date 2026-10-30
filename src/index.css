@@ -172,3 +172,13 @@
     letter-spacing: 0.12em;
   }
 }
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.35) rgba(9, 9, 14, 0.85);
+}
+
+.prose code::before,
+.prose code::after {
+  content: none !important;
+}

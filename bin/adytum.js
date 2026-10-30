@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { getAllKeys, getKey, validatePlan, generateProjectInvariants } from '../src/core/adytum.js';
+import { getAllKeys, getKey, validatePlan, hardenPlan, generateProjectInvariants } from '../src/core/adytum.js';
 import { runMcpServer } from '../src/mcp/server.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +32,7 @@ function printHelp() {
   console.log(`  ${CYAN}list${RESET}                      List all 22 Ageless Wisdom Keys and Invariants`);
   console.log(`  ${CYAN}key <0-21>${RESET}                Display canonical symbolism and attributes for a Key`);
   console.log(`  ${CYAN}validate <file>${RESET}           Audit a software architecture / plan against the 22 invariants`);
+  console.log(`  ${CYAN}harden [file]${RESET}             Auto-harden a specification so all 15 Hermetic Invariants pass (100/100)`);
   console.log(`  ${CYAN}invariants [name]${RESET}         Generate a 22-point deterministic quality checklist`);
   console.log(`  ${CYAN}mcp${RESET}                       Run Model Context Protocol (MCP) server over stdio for AI agents`);
   console.log(`  ${CYAN}version${RESET}                   Display current engine version\n`);
@@ -227,6 +228,27 @@ async function main() {
 
     console.log(`\n${result.passed ? GREEN : RED}${result.summary}${RESET}\n`);
     process.exit(result.passed ? 0 : 2);
+  }
+
+  if (command === 'harden') {
+    const fileArg = args.find((a, i) => i > 0 && !a.startsWith('--'));
+    let content = '';
+    if (fileArg && fileArg !== '-' && fs.existsSync(fileArg)) {
+      content = fs.readFileSync(fileArg, 'utf8');
+    } else if (fileArg && fileArg !== '-') {
+      content = fileArg;
+    }
+    const result = hardenPlan(content, 'Sovereign Architecture');
+    if (isJson) {
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
+    }
+    banner();
+    console.log(`${BOLD}HERMETIC AUTO-HARDENING COMPLETE${RESET}`);
+    console.log(`Score: ${GRAY}${result.originalScore}/100 (${result.originalGrade})${RESET} → ${GREEN}${BOLD}${result.hardenedScore}/100 (${result.hardenedGrade})${RESET}\n`);
+    console.log(result.hardenedText);
+    console.log('');
+    process.exit(0);
   }
 
   console.error(`${RED}Unknown command: "${command}". Run "adytum --help" to inspect commands.${RESET}`);

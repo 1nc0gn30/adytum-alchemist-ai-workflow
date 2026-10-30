@@ -90,6 +90,10 @@ adytum invariants "SovereignAuthEnclave" --json
 adytum validate ./plan.md
 cat architectural_spec.md | adytum validate - --json
 
+# Auto-harden a draft specification so all 15 Hermetic Invariants pass (100/100 A+)
+adytum harden ./plan.md
+adytum harden ./plan.md --json
+
 # Launch the local Web Workstation on http://127.0.0.1:8135
 adytum web
 
@@ -99,15 +103,21 @@ adytum mcp
 
 ---
 
-## 🌐 Web Workstation (`:8135` & Zoth Studio v2)
+## 🌐 3-Column Sovereign Web Workstation (`:8135` & Zoth Studio v2)
 
 - **Local ZothOS Workstation**: `http://127.0.0.1:8135` (served by `server/serve.js` or `adytum web`)
-- **Zoth Studio v2 God-Mode Workstation**: `https://zoth.nullai.tech/tools/adytum-alchemist-ai-workflow`
+- **REST API Endpoints (`:8135`)**:
+  - `GET /health` — Service health & zero-egress status
+  - `GET /api/keys` & `GET /api/keys/:id` — All 22 canonical BOTA Keys, Hebrew letters, Gematria, and symbolism
+  - `GET /api/invariants?project=MyApp` — Generate a 22-point deterministic invariant checklist
+  - `POST /api/validate` — Audit a specification (`{"plan": "..."}`) and return score, grade, and pass/fail checks
+  - `POST /api/harden` — Automatically remediate failing invariants to achieve `100/100 (A+)`
+- **Zoth Studio v2 God-Mode Workstation**: `https://zoth.nullai.tech/tools/adytum-alchemist-ai-workflow` and `/adytum`
 
-Features included in the Web Workstation:
-- **Sovereign Local Oracle (Zero-Key Default)**: Works 100% out of the box with zero API keys required, plus optional **Ollama Local (`127.0.0.1:11434`)**, **Ollama Cloud**, and **OpenAI** providers.
-- **🛡️ 22-Key Plan Gatekeeper Drawer**: Paste any architectural PRD or agent plan to compute its live Hermetic Gate Score (`0–100`), grade (`A+` to `NEEDS_REVISION`), and pass/fail checks.
-- **📖 In-App Documentation & CLI Drawer**: Built-in reference guide and 1-click Key jumper (`Key 0` to `Key 21`).
+Features included in the 3-Column Web Workstation:
+- **Left Column (22-Key Hermetic Arcana Rail)**: Instant 1-click navigation across all 22 Keys (`00 · The Fool` → `21 · The World`) with Hebrew letters, Gematria, and completion status (`✔`).
+- **Center Column (Active Tarot Key Initiation & 5-Min BOTA Incubation)**: Displays the canonical BOTA Tarot card artwork (`/tarot/fool.jpg`..`/tarot/world.jpg`), Attribution, Engineering Invariant, AI Chemistry Lesson, 3-step BOTA Practice Protocol (with **⚡ Populate Archetypal Example**), interactive 5-minute meditation chronometer, and Sovereign Local Oracle synthesis.
+- **Right Column (Live 22-Key Architectural Plan Gatekeeper & Auto-Hardener)**: Paste any PRD or architecture spec for live 15-rule scoring (`0–100`), click **✨ Auto-Harden Invariants** to remediate missing clauses to `100/100 (A+)`, and export `.md` PRD or `.json` manifest.
 
 ---
 
