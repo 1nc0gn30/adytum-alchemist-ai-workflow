@@ -1,72 +1,75 @@
 <div align="center">
-  <img src="assets/hero-banner.svg" alt="Adytum Alchemist Ai Workflow — Sovereign Architecture Banner" width="100%" />
+  <img src="assets/hero-banner.svg" alt="Adytum Alchemist AI Workflow — Sovereign Architecture Banner" width="100%" />
 </div>
 
 <br />
 
-# ⚡ Adytum Alchemist AI Workflow
+# ⚡ Adytum Alchemist AI Workflow (`adytum`)
 
 <p align="center">
-  <strong>22-Key Hermetic Ageless Wisdom Planning Rite, Invariant Gatekeeper &amp; Model Context Protocol (MCP) Server</strong>
+  <strong>22-Key Hermetic Ageless Wisdom Planning Rite, Deterministic Invariant Gatekeeper &amp; Model Context Protocol (MCP) Server</strong>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Access-100%25%20Free%20%26%20Open-10B981?style=for-the-badge" alt="100% Free & Open Access">
   <img src="https://img.shields.io/badge/Security-Zero--Egress%20Air--Gapped-1e8e3e?style=for-the-badge&logoColor=white" alt="Zero-Egress">
-  <img src="https://img.shields.io/badge/MCP-Protocol%202.0-9334e6?style=for-the-badge&logo=anthropic&logoColor=white" alt="MCP Ready">
-  <img src="https://img.shields.io/badge/Node.js-18%20--%2026+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node Support">
-  <img src="https://img.shields.io/badge/Local%20Models-Ollama%20%2F%20vLLM-blue?style=for-the-badge" alt="Local Models">
-  <img src="https://img.shields.io/badge/License-Apache%202.0-202124?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/MCP-Protocol%202024--11--05-9334e6?style=for-the-badge&logo=anthropic&logoColor=white" alt="MCP Ready">
+  <img src="https://img.shields.io/badge/ZothOS%20Port-%3A8135-D4AF37?style=for-the-badge" alt="ZothOS Port 8135">
+  <a href="https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X"><img src="https://img.shields.io/badge/%E2%98%95%20Buy%20Us%20a%20Coffee-Stripe-F59E0B?style=for-the-badge" alt="Buy Us a Coffee"></a>
 </p>
 
 ---
 
-## 🌟 Overview
+## 🌟 What It Does & How It Works
 
-**Adytum Alchemist AI Workflow** is an architectural planning discipline, local gatekeeper CLI, and autonomous agent MCP server based on the **22 Major Keys of Ageless Wisdom** (BOTA lineage).
+**Adytum Alchemist AI Workflow** (`adytum` / `adytum-alchemist-ai-workflow`) is an architectural planning discipline, local gatekeeper CLI, interactive web workstation (`:8135`), and autonomous agent MCP server based on the **22 Major Keys of Ageless Wisdom** (Builders of the Adytum / BOTA lineage).
 
-It replaces ad-hoc prompt iteration and unverified coding agent loops with a deterministic **22-step planning rite**:
-1. **Intention Formulation (Key 0 The Fool)**
-2. **Single-Pointed Focus (Key 1 The Magician)**
-3. **Memory & State Invariants (Key 2 The High Priestess)**
-4. **Air-Gapped Isolation & Sandboxing (Key 7 The Chariot)**
-5. **Deterministic Verification Tests (Key 9 The Hermit)**
-6. **Elimination of Mock State (Key 15 The Devil)**
-7. **Sovereign Wholeness & Zero-Egress Proof (Key 21 The World)**
+Instead of ad-hoc prompt guessing or unverified coding agent loops, Adytum guides engineers and AI agents through a **three-stage planning rite** across all 22 Keys (`Key 0: The Fool` through `Key 21: The World`):
 
-It exposes both an interactive CLI (`adytum`), a native Model Context Protocol (MCP) server for AI pair programmers (Claude Desktop, Cursor, Cline, Hermes Agent, OpenCode), and an initiation web cockpit.
-
----
-
-## 🚀 Key Highlights
-
-- 🛡️ **22-Point Hermetic Invariant Engine:** Audits engineering plans, PRDs, and subagent goals against rigorous structural invariants before code is written.
-- 🤖 **Model Context Protocol (MCP) Server:** Exposes 4 standardized tool endpoints (`adytum_list_keys`, `adytum_get_key`, `adytum_validate_plan`, `adytum_generate_invariants`) over stdio for autonomous AI agents.
-- ⚡ **Zero-Cloud Local Model First:** Natively evaluates plans using local Ollama (`http://127.0.0.1:11434`) models (Qwen 2.5 Coder, Llama 3.1, DeepSeek-Coder) with optional Anthropic Claude & OpenAI cloud fallback.
-- 💻 **Standalone CLI Binary (`adytum`):** Inspect keys, evaluate plans from stdin, and generate project invariants directly in the terminal with `--json` support.
-- 🎨 **Zoth Aesthetic Dark UI:** Built with Obsidian Black (`#08080B`) and Sovereign Gold (`#D4AF37`) palette with timed meditation reflection gates.
+1. **Conscious Intention & Symbol Observation**:
+   - Inspect the canonical Tarot Key (`0–21`), its Hebrew letter, Gematria value, Astrological attribution, and **AI Chemistry Lesson**.
+   - Formulate a concrete **Conscious Intention**, **Symbol Observation**, and **Subconscious Seed Directive**.
+2. **5-Minute Subconscious Incubation Gate**:
+   - Hold the seed directive during a timed 5-minute meditation while observing the canonical BOTA archetype (with an optional fast-forward control for rapid iteration).
+   - Record the **Post-Meditation Architectural Synthesis** to unlock the next Gate (`[GATE OPENED]`).
+3. **22-Point Deterministic Invariant Gatekeeper**:
+   - Before writing code or dispatching subagents, pass your PRD, specification, or architectural plan through the **15-Rule / 22-Key Hermetic Invariant Gatekeeper** (`adytum validate <file>` or the in-app **🛡️ 22-Key Plan Gatekeeper** drawer).
+   - Audits specifications for single-pointed scope, state/memory integrity, standardized JSON/type schemas, explicit boundary tradeoffs, air-gapped isolation (`127.0.0.1`), error resilience, deterministic verification tests, latency budgets, resource cleanup, anti-deception (zero mock/placeholder state), structured logging, and CI release gates.
 
 ---
 
-## 📦 Installation & Quickstart
+## 🏛️ The 22 Canonical Hermetic Keys & Engineering Invariants
 
-```bash
-# Clone the repository
-git clone https://github.com/NullAITech/adytum-alchemist-ai-workflow.git
-cd adytum-alchemist-ai-workflow
-
-# Install dependencies
-npm install
-
-# Run automated test suite
-npm test
-
-# Link CLI binary globally (optional)
-npm link
-```
+| Key | Arcana | Hebrew Letter | Gematria | Astrology | Engineering Invariant |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **0** | **The Fool** | Aleph | 1 | Air | Pure Potentiality & Unbounded Ideation |
+| **1** | **The Magician** | Beth | 2 | Mercury | Focused Intention & Single-Pointed Execution |
+| **2** | **The High Priestess** | Gimel | 3 | Moon | Cryptographic Memory & Zero-Leak Storage |
+| **3** | **The Empress** | Daleth | 4 | Venus | Generative Architecture & Organic Scalability |
+| **4** | **The Emperor** | Heh | 5 | Aries | Immutable Invariants & Structural Governance |
+| **5** | **The Hierophant** | Vav | 6 | Taurus | Standardized Contracts & Semantic Schemas |
+| **6** | **The Lovers** | Zain | 7 | Gemini | Binary Tradeoff Discipline & Clean Boundaries |
+| **7** | **The Chariot** | Cheth | 8 | Cancer | Air-Gapped Isolation & Sandbox Enclosures |
+| **8** | **Strength** | Teth | 9 | Leo | Graceful Error Handling & Self-Healing Loops |
+| **9** | **The Hermit** | Yod | 10 | Virgo | Deterministic Verification & Zero-Dependency Audits |
+| **10** | **Wheel of Fortune** | Kaph | 20 | Jupiter | State Loop Determinism & Replayability |
+| **11** | **Justice** | Lamed | 30 | Libra | Strict Verification Tests & Equilibrated Budgets |
+| **12** | **The Hanged Man** | Mem | 40 | Water | Asynchronous Non-Blocking Flow & Calm Pacing |
+| **13** | **Death** | Nun | 50 | Scorpio | Ruthless Cruft Pruning & Resource Cleanup |
+| **14** | **Temperance** | Samekh | 60 | Sagittarius | Rate-Limiting & High-Concurrence Harmony |
+| **15** | **The Devil** | Ayin | 70 | Capricorn | Anti-Deception Audit & Elimination of Mock State |
+| **16** | **The Tower** | Peh | 80 | Mars | Chaos Resilience & Graceful Crash Recovery |
+| **17** | **The Star** | Tzaddi | 90 | Aquarius | Transparent Telemetry & Clear Logging |
+| **18** | **The Moon** | Qoph | 100 | Pisces | Deep Synaptic Retention & Subconscious Caches |
+| **19** | **The Sun** | Resh | 200 | Sun | Production-Grade Elegance & High-Fidelity UI |
+| **20** | **Judgement** | Shin | 300 | Fire | Comprehensive Integration Sentinel & Release Gate |
+| **21** | **The World** | Tav | 400 | Saturn | Hermetic Sovereign Wholeness & Zero-Egress Proof |
 
 ---
 
-## 🛠️ CLI Usage
+## 💻 ZothOS CLI Usage (`adytum` & `adytum-alchemist-ai-workflow`)
+
+Both `adytum` and `adytum-alchemist-ai-workflow` are installed globally in `/usr/local/bin` on ZothOS:
 
 ```bash
 # List all 22 Ageless Wisdom Keys and their engineering invariants
@@ -75,33 +78,49 @@ adytum list
 # Output full canonical keys in machine-readable JSON
 adytum list --json
 
-# Inspect a specific Key (0 to 21)
+# Inspect a specific Key (0 to 21) with Hebrew letter, gematria, and symbolism
 adytum key 0
 adytum key 7 --json
 
 # Generate a 22-point deterministic quality checklist for your project
-adytum invariants "MyAuthEnclave"
-adytum invariants "MyAuthEnclave" --json
+adytum invariants "SovereignAuthEnclave"
+adytum invariants "SovereignAuthEnclave" --json
 
 # Audit a plan or PRD against the 22 hermetic quality invariants
 adytum validate ./plan.md
-cat architectural_spec.json | adytum validate - --json
+cat architectural_spec.md | adytum validate - --json
+
+# Launch the local Web Workstation on http://127.0.0.1:8135
+adytum web
+
+# Start the Model Context Protocol (MCP) server over stdio
+adytum mcp
 ```
+
+---
+
+## 🌐 Web Workstation (`:8135` & Zoth Studio v2)
+
+- **Local ZothOS Workstation**: `http://127.0.0.1:8135` (served by `server/serve.js` or `adytum web`)
+- **Zoth Studio v2 God-Mode Workstation**: `https://zoth.nullai.tech/tools/adytum-alchemist-ai-workflow`
+
+Features included in the Web Workstation:
+- **Sovereign Local Oracle (Zero-Key Default)**: Works 100% out of the box with zero API keys required, plus optional **Ollama Local (`127.0.0.1:11434`)**, **Ollama Cloud**, and **OpenAI** providers.
+- **🛡️ 22-Key Plan Gatekeeper Drawer**: Paste any architectural PRD or agent plan to compute its live Hermetic Gate Score (`0–100`), grade (`A+` to `NEEDS_REVISION`), and pass/fail checks.
+- **📖 In-App Documentation & CLI Drawer**: Built-in reference guide and 1-click Key jumper (`Key 0` to `Key 21`).
 
 ---
 
 ## 🤖 Model Context Protocol (MCP) Setup
 
-Connect Adytum directly to your AI agent workflows (Claude Desktop, Cursor, Cline, Hermes Agent, OpenCode):
-
-Add to your `claude_desktop_config.json` or Cursor MCP settings:
+Connect Adytum directly to Claude Desktop, Cursor, Cline, Hermes Agent, or Antigravity:
 
 ```json
 {
   "mcpServers": {
     "adytum": {
-      "command": "node",
-      "args": ["/path/to/adytum-alchemist-ai-workflow/bin/adytum.js", "mcp"],
+      "command": "adytum",
+      "args": ["mcp"],
       "env": {
         "ZOTH_ZERO_EGRESS": "true"
       }
@@ -110,53 +129,28 @@ Add to your `claude_desktop_config.json` or Cursor MCP settings:
 }
 ```
 
-### Available MCP Tools:
+### Exposed MCP Tools:
 - `adytum_list_keys`: List all 22 Hermetic Keys with Hebrew letters and core invariants.
-- `adytum_get_key`: Retrieve deep canonical symbolism, gematria, and reflection prompts for any Key (0–21).
+- `adytum_get_key`: Retrieve deep canonical symbolism, gematria, and reflection prompts for any Key (`0–21`).
 - `adytum_validate_plan`: Validate a software proposal, PRD, or plan text against the 22 invariants.
 - `adytum_generate_invariants`: Generate a 22-point invariant checklist for any project.
 
 ---
 
-## 🧪 Automated Testing
-
-Adytum uses Node's native test runner with zero third-party test framework overhead:
+## 🧪 Automated Verification
 
 ```bash
 npm test
 ```
 
-Expected output:
-```text
-▶ Adytum Core 22-Key Ageless Wisdom Engine
-  ✔ loads all 22 canonical keys
-  ✔ retrieves individual key by index
-  ✔ generates 22 project invariants
-  ✔ validates incomplete plans as failing the gate
-  ✔ validates hardened plans as passing with high score
-✔ Adytum Core 22-Key Ageless Wisdom Engine
-▶ Adytum CLI & MCP Server Endpoints
-  ✔ CLI list command outputs valid JSON with --json
-  ✔ CLI key command outputs valid Key details
-  ✔ CLI validate command outputs structured evaluation
-  ✔ MCP stdio server handles initialize and tool calls
-✔ Adytum CLI & MCP Server Endpoints
-```
+---
+
+## ☕ Support Open-Access Sovereign Tools
+
+All ZothOS and NullAI tools are **100% free, open, and unlocked by default** with zero paywalls.
+- **☕ Buy Us a Coffee (Stripe)**: [https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X](https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X)
+- **◎ Solana Tip Address**: `GG2eQbVh8ut1BK6j1A2tz7pSySdLpD38BgyEhGcxdXoK`
 
 ---
 
-## 🌐 Web Dashboard
-
-To run the interactive web interface:
-
-```bash
-npm run dev
-# Opens at http://localhost:3000
-```
-
----
-
-## 📜 License
-
-Apache 2.0. Built for the sovereign agent ecosystem.
-Part of the **NullAI & ZothOS Sovereign Tool Matrix**.
+**Engineered by Neal Frazier Tech ([@1nc0gn30](https://github.com/1nc0gn30)) • [NullAI Platform](https://nullai.tech)**

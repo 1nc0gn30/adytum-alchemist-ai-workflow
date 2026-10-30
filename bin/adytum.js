@@ -28,7 +28,7 @@ function printHelp() {
   console.log(`  adytum <command> [options]\n`);
   console.log(`${BOLD}COMMANDS:${RESET}`);
   console.log(`  ${CYAN}desktop${RESET}                   Launch the sovereign Electron desktop workstation`);
-  console.log(`  ${CYAN}web${RESET}                       Start the local web server on http://127.0.0.1:8103`);
+  console.log(`  ${CYAN}web${RESET}                       Start the local web server on http://127.0.0.1:8135`);
   console.log(`  ${CYAN}list${RESET}                      List all 22 Ageless Wisdom Keys and Invariants`);
   console.log(`  ${CYAN}key <0-21>${RESET}                Display canonical symbolism and attributes for a Key`);
   console.log(`  ${CYAN}validate <file>${RESET}           Audit a software architecture / plan against the 22 invariants`);
@@ -56,14 +56,16 @@ async function main() {
   }
 
   if (command === 'web' || command === '--web') {
-    console.log('⚡ Launching Adytum Alchemist Web UI on http://127.0.0.1:8103 ...');
+    const portArgIdx = args.findIndex((a) => a === '--port' || a === '-p');
+    const port = (portArgIdx >= 0 && args[portArgIdx + 1]) ? args[portArgIdx + 1] : (process.env.PORT || '8135');
+    console.log(`⚡ Launching Adytum Alchemist Web UI on http://127.0.0.1:${port} ...`);
     const rootDir = path.resolve(__dirname, '..');
     const child = spawn('node', ['server/serve.js'], {
       cwd: rootDir,
       stdio: 'inherit',
       env: {
         ...process.env,
-        PORT: '8103',
+        PORT: String(port),
         ZOTH_ZERO_EGRESS: 'true',
       },
     });

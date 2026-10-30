@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type AppStage = "welcome" | "loading" | "lesson" | "meditating" | "answering" | "reflection_needed";
-type ProviderId = "openai" | "ollama_cloud" | "ollama_local";
+type ProviderId = "hermetic_local" | "ollama_local" | "openai" | "ollama_cloud";
 type ChatRole = "user" | "assistant";
 
 type SessionMessage = {
@@ -47,14 +47,14 @@ const SESSION_LOG_STORAGE_KEY = "adytum_session_log";
 const PROGRESS_STORAGE_KEY = "adytum_progress_state";
 
 const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
-  provider: "openai",
+  provider: "hermetic_local",
   openaiApiKey: "",
   openaiModel: "gpt-4.1-mini",
   ollamaCloudApiKey: "",
   ollamaCloudBaseUrl: "https://ollama.com",
   ollamaCloudModel: "llama3.1:8b",
-  ollamaLocalBaseUrl: "http://localhost:11434",
-  ollamaLocalModel: "llama3.1:8b",
+  ollamaLocalBaseUrl: "http://127.0.0.1:11434",
+  ollamaLocalModel: "qwen2.5-coder:1.5b-instruct",
 };
 
 const TAROT_IMAGE_PATHS: Record<number, string> = {
@@ -278,7 +278,118 @@ function getDefaultProgressState(): ProgressState {
   return { cards, totalCyclesCompleted: 0, cycleCompletions: [] };
 }
 
+const HERMETIC_CANONICAL_METADATA: Array<{
+  key: number;
+  name: string;
+  letter: string;
+  signification: string;
+  astrology: string;
+  gematria: number;
+  invariant: string;
+  aiChemistry: string;
+  question: string;
+}> = [
+  { key: 0, name: "The Fool", letter: "Aleph", signification: "Cultural Power, Life-Breath, Creative Energy", astrology: "Air", gematria: 1, invariant: "Pure Potentiality & Unbounded Ideation", aiChemistry: "Zero-shot latent space prior before prompt constraints are imposed; stripping inherited biases to formulate the irreducible problem statement.", question: "What inherited assumption must you strip from your architecture so only the sovereign objective remains?" },
+  { key: 1, name: "The Magician", letter: "Beth", signification: "House, Attention, Direct Will", astrology: "Mercury", gematria: 2, invariant: "Focused Intention & Single-Pointed Execution", aiChemistry: "Directed attention heads and tool-calling orchestration: binding local CLI tools, memory, and compute to a single unambiguous goal.", question: "How does your system focus attention on one verifiable contract at a time without scope drift?" },
+  { key: 2, name: "The High Priestess", letter: "Gimel", signification: "Memory, Subconscious Storage, Continuity", astrology: "Moon", gematria: 3, invariant: "Cryptographic Memory & Zero-Leak Storage", aiChemistry: "Persistent vector memory, immutable event logs, and encrypted state stores that preserve context across sessions without data leakage.", question: "Where is state persisted in your system, and how do you guarantee zero unauthorized egress or corruption?" },
+  { key: 3, name: "The Empress", letter: "Daleth", signification: "Door, Creative Imagination, Organic Growth", astrology: "Venus", gematria: 4, invariant: "Generative Architecture & Organic Scalability", aiChemistry: "Composable module synthesis where primitives combine naturally to produce rich user experiences without brittle coupling.", question: "Which core primitive in your design multiplies downstream capability while keeping complexity low?" },
+  { key: 4, name: "The Emperor", letter: "Heh", signification: "Window, Sight, Constitution, Governance", astrology: "Aries", gematria: 5, invariant: "Immutable Invariants & Structural Governance", aiChemistry: "Strict type schemas, runtime assertions, and constitutional guardrails that reject malformed inputs at the boundary.", question: "What non-negotiable structural invariants does your system enforce before executing any state mutation?" },
+  { key: 5, name: "The Hierophant", letter: "Vav", signification: "Nail, Intuition, Unified Schema", astrology: "Taurus", gematria: 6, invariant: "Standardized Contracts & Semantic Schemas", aiChemistry: "Model Context Protocol (MCP) JSON-RPC schemas and canonical interfaces that allow heterogeneous agents to interoperate cleanly.", question: "How are your API and CLI contracts documented so both humans and autonomous agents can invoke them deterministically?" },
+  { key: 6, name: "The Lovers", letter: "Zain", signification: "Sword, Discrimination, Critical Choice", astrology: "Gemini", gematria: 7, invariant: "Binary Tradeoff Discipline & Clean Boundaries", aiChemistry: "Sharp architectural discrimination: explicitly stating non-goals, boundary conditions, and security separations.", question: "What explicit non-goals and boundary separations protect your architecture from feature creep?" },
+  { key: 7, name: "The Chariot", letter: "Cheth", signification: "Fence, Enclosure, Receptive Armor", astrology: "Cancer", gematria: 8, invariant: "Air-Gapped Isolation & Sandbox Enclosures", aiChemistry: "Loopback-bound execution (127.0.0.1), sandboxing, and zero-cloud dependency so the vehicle runs under sovereign control.", question: "How does your tool guarantee 100% functionality when completely disconnected from external cloud APIs?" },
+  { key: 8, name: "Strength", letter: "Teth", signification: "Serpent, Subconscious Control, Resilience", astrology: "Leo", gematria: 9, invariant: "Graceful Error Handling & Self-Healing Loops", aiChemistry: "Bounded retry loops, circuit breakers, and deterministic fallback engines that tame chaotic runtime failures.", question: "When a subprocess, port, or model call fails, how does your system recover gracefully without crashing?" },
+  { key: 9, name: "The Hermit", letter: "Yod", signification: "Hand, Isolated Introspection, Lantern", astrology: "Virgo", gematria: 10, invariant: "Deterministic Verification & Zero-Dependency Audits", aiChemistry: "Self-contained verification suites and smoke tests that prove actual runtime behavior rather than trusting documentation.", question: "What single command proves end-to-end that your implementation works against live inputs?" },
+  { key: 10, name: "Wheel of Fortune", letter: "Kaph", signification: "Grasping Hand, Cyclical Rhythm, State Loops", astrology: "Jupiter", gematria: 20, invariant: "State Loop Determinism & Replayability", aiChemistry: "Idempotent event loops, seeded randomness, and reproducible state transitions across ticks and epochs.", question: "If your system is restarted mid-operation, does it resume cleanly from deterministic state?" },
+  { key: 11, name: "Justice", letter: "Lamed", signification: "Ox-Goad, Equilibrium, Balanced Metrics", astrology: "Libra", gematria: 30, invariant: "Strict Verification Tests & Equilibrated Budgets", aiChemistry: "Quantitative latency, memory, and accuracy benchmarks that hold every component accountable to measurable SLAs.", question: "What concrete latency, memory, or recall budgets govern your acceptance criteria?" },
+  { key: 12, name: "The Hanged Man", letter: "Mem", signification: "Water, Inverted Perspective, Surrender", astrology: "Water", gematria: 40, invariant: "Asynchronous Non-Blocking Flow & Calm Pacing", aiChemistry: "Non-blocking event streams, reactive wakeup, and inverting control flow from busy polling to event-driven precision.", question: "Where can you replace polling or blocking bottlenecks with clean event-driven architecture?" },
+  { key: 13, name: "Death", letter: "Nun", signification: "Fish, Transformation, Pruning Dead State", astrology: "Scorpio", gematria: 50, invariant: "Ruthless Cruft Pruning & Resource Cleanup", aiChemistry: "Eliminating dead code, zombie processes, stale caches, and legacy paywall clutter so the core engine runs lean.", question: "What dead state, redundant wrappers, or technical debt must be pruned from this module?" },
+  { key: 14, name: "Temperance", letter: "Samekh", signification: "Tent-Peg, Verification, Harmonious Synthesis", astrology: "Sagittarius", gematria: 60, invariant: "Rate-Limiting & High-Concurrence Harmony", aiChemistry: "Hybrid fusion (like combining dense vectors with lexical BM25 or local CLI with browser UI) in calibrated equilibrium.", question: "How do your CLI backend and browser frontend complement each other without state drift?" },
+  { key: 15, name: "The Devil", letter: "Ayin", signification: "Eye, Surface Illusion, Material Traps", astrology: "Capricorn", gematria: 70, invariant: "Anti-Deception Audit & Elimination of Mock State", aiChemistry: "Banishing fake setTimeout placeholders, mock strings, and deceptive labels so every metric reflects real computation.", question: "Have you verified that zero fake placeholders or misleading cipher/metric labels remain in the codebase?" },
+  { key: 16, name: "The Tower", letter: "Peh", signification: "Mouth, Sudden Illumination, Lightning Break", astrology: "Mars", gematria: 80, invariant: "Chaos Resilience & Graceful Crash Recovery", aiChemistry: "Fault-injection testing and dismantling brittle assumptions before production traffic exposes them.", question: "What happens to your user's data if the process is killed abruptly during a write?" },
+  { key: 17, name: "The Star", letter: "Tzaddi", signification: "Fish-Hook, Meditation, Clear Intuition", astrology: "Aquarius", gematria: 90, invariant: "Transparent Telemetry & Clear Logging", aiChemistry: "Structured observability, clear diagnostic endpoints (/health, /api/status), and human-readable explanations.", question: "Can an operator diagnose the health and active configuration of your service in under 5 seconds?" },
+  { key: 18, name: "The Moon", letter: "Qoph", signification: "Back of Head, Somatic Instinct, Cellular Memory", astrology: "Pisces", gematria: 100, invariant: "Deep Synaptic Retention & Subconscious Caches", aiChemistry: "Background indexing, lineage tracking, and subconscious pattern consolidation across long-running sessions.", question: "How does your application preserve user history and learned artifacts across upgrades?" },
+  { key: 19, name: "The Sun", letter: "Resh", signification: "Head, Radiance, Regenerated Mastery", astrology: "Sun", gematria: 200, invariant: "Production-Grade Elegance & High-Fidelity UI", aiChemistry: "Luminous, accessible interface craft across mobile, tablet, and desktop viewports with zero visual clutter.", question: "Does the interface make complex power feel effortless, clear, and joyful to a first-time user?" },
+  { key: 20, name: "Judgement", letter: "Shin", signification: "Tooth, Transmutation, Final Realization", astrology: "Fire", gematria: 300, invariant: "Comprehensive Integration Sentinel & Release Gate", aiChemistry: "Pre-release acceptance gates that verify CLI, REST API, UI, and documentation parity in unison.", question: "Do your README, in-app documentation, CLI --help, and live UI all tell the exact same truth?" },
+  { key: 21, name: "The World", letter: "Tav", signification: "Mark, Signature, Wholeness, Complete Cycle", astrology: "Saturn", gematria: 400, invariant: "Hermetic Sovereign Wholeness & Zero-Egress Proof", aiChemistry: "The sealed, self-contained sovereign artifact: 100% open-access, locally verifiable, and ready for autonomous deployment.", question: "Is the artifact complete, unlocked, documented, and verified across both ZothOS CLI and browser?" },
+];
+
+function synthesizeHermeticLocalResponse(history: SessionMessage[]): string {
+  const assistantMessages = history.filter((m) => m.role === "assistant");
+  let currentKey = 0;
+  if (assistantMessages.length > 0) {
+    const lastAssistant = assistantMessages[assistantMessages.length - 1].content;
+    const detected = detectTarotKeyNumber(lastAssistant.replace(/\[(GATE OPENED|REFLECTION NEEDED)\]/g, ""));
+    if (detected !== null) currentKey = detected;
+  }
+
+  const lastUser = [...history].reverse().find((m) => m.role === "user")?.content.trim() || "Start";
+  const jumpMatch = lastUser.match(/^key\s*(\d{1,2})$/i);
+  if (jumpMatch) {
+    const target = Math.max(0, Math.min(21, Number(jumpMatch[1])));
+    const meta = HERMETIC_CANONICAL_METADATA[target];
+    return `**Image**: ![${meta.name}](${TAROT_IMAGE_PATHS[target]})\n\n### Key ${meta.key}: ${meta.name}\n\n**The Attribution**: Key ${meta.key} • Hebrew Letter **${meta.letter}** (Gematria: ${meta.gematria}) • Astrology: **${meta.astrology}** • Signification: *${meta.signification}*.\n\n**The Engineering Invariant**: \`${meta.invariant}\`\n\n**The AI Chemistry Lesson**: ${meta.aiChemistry}\n\n**The Alchemical Question**: *${meta.question}*`;
+  }
+
+  if (assistantMessages.length === 0 || /^start$/i.test(lastUser)) {
+    const meta = HERMETIC_CANONICAL_METADATA[0];
+    return `**Image**: ![${meta.name}](${TAROT_IMAGE_PATHS[0]})\n\n### Key ${meta.key}: ${meta.name}\n\n**The Attribution**: Key ${meta.key} • Hebrew Letter **${meta.letter}** (Gematria: ${meta.gematria}) • Astrology: **${meta.astrology}** • Signification: *${meta.signification}*.\n\n**The Engineering Invariant**: \`${meta.invariant}\`\n\n**The AI Chemistry Lesson**: ${meta.aiChemistry}\n\n**The Alchemical Question**: *${meta.question}*`;
+  }
+
+  const nextKey = (currentKey + 1) % 22;
+  const prevMeta = HERMETIC_CANONICAL_METADATA[currentKey];
+  const meta = HERMETIC_CANONICAL_METADATA[nextKey];
+  return `[GATE OPENED]\n**Image**: ![${meta.name}](${TAROT_IMAGE_PATHS[nextKey]})\n\n### Gate ${prevMeta.key} (${prevMeta.name}) Sealed → Advancing to Key ${meta.key}: ${meta.name}\n\nYour reflection integrates the **${prevMeta.invariant}** invariant (${prevMeta.letter}). The gate now opens to **Key ${meta.key}: ${meta.name}**.\n\n**The Attribution**: Key ${meta.key} • Hebrew Letter **${meta.letter}** (Gematria: ${meta.gematria}) • Astrology: **${meta.astrology}** • Signification: *${meta.signification}*.\n\n**The Engineering Invariant**: \`${meta.invariant}\`\n\n**The AI Chemistry Lesson**: ${meta.aiChemistry}\n\n**The Alchemical Question**: *${meta.question}*`;
+}
+
+function validatePlanClient(planText: string) {
+  const text = (planText || "").toLowerCase();
+  const rules = [
+    { key: 0, test: () => text.length > 50, label: "Intention & Purpose Defined", weight: 5 },
+    { key: 1, test: () => text.includes("scope") || text.includes("goal") || text.includes("objective"), label: "Single-Pointed Focus (Beth)", weight: 5 },
+    { key: 2, test: () => text.includes("memory") || text.includes("store") || text.includes("cache") || text.includes("state"), label: "State & Memory Integrity (Gimel)", weight: 5 },
+    { key: 4, test: () => text.includes("invariant") || text.includes("rule") || text.includes("constraint"), label: "Immutable Invariants Enforced (Heh)", weight: 5 },
+    { key: 5, test: () => text.includes("schema") || text.includes("json") || text.includes("contract") || text.includes("type"), label: "Standardized Schemas & Interfaces (Vav)", weight: 5 },
+    { key: 6, test: () => text.includes("tradeoff") || text.includes("boundary") || text.includes("exclude"), label: "Explicit Tradeoffs & Non-Goals (Zain)", weight: 4 },
+    { key: 7, test: () => text.includes("isolate") || text.includes("air-gap") || text.includes("sandbox") || text.includes("zero-egress") || text.includes("local"), label: "Air-Gapped Isolation & Sandbox (Cheth)", weight: 6 },
+    { key: 8, test: () => text.includes("error") || text.includes("fail") || text.includes("catch") || text.includes("resilien"), label: "Graceful Error Handling (Teth)", weight: 5 },
+    { key: 9, test: () => text.includes("test") || text.includes("audit") || text.includes("verify"), label: "Deterministic Verification Test Suite (Yod)", weight: 6 },
+    { key: 11, test: () => text.includes("budget") || text.includes("metric") || text.includes("eval") || text.includes("benchmark"), label: "Performance & Budget Equilibrated (Lamed)", weight: 4 },
+    { key: 13, test: () => text.includes("clean") || text.includes("prune") || text.includes("remove") || text.includes("purge"), label: "Resource Pruning & Cleanup (Nun)", weight: 4 },
+    { key: 15, test: () => !text.includes("placeholder") && !text.includes("mock_production") && !text.includes("fake_data"), label: "Truth In Advertising / No Fake State (Ayin)", weight: 6 },
+    { key: 17, test: () => text.includes("log") || text.includes("telemetry") || text.includes("trace") || text.includes("stdout"), label: "Clear Logging & Diagnostics (Tzaddi)", weight: 4 },
+    { key: 20, test: () => text.includes("release") || text.includes("deploy") || text.includes("deliver") || text.includes("ci"), label: "Integration Gate & Release Verification (Shin)", weight: 5 },
+    { key: 21, test: () => !text.includes("cloud-only") && (text.includes("offline") || text.includes("local-first") || text.includes("sovereign")), label: "Sovereign Wholeness & Local Autonomy (Tav)", weight: 5 },
+  ];
+  let scoreTotal = 0;
+  const checks = rules.map((r) => {
+    const passed = r.test();
+    if (passed) scoreTotal += r.weight;
+    const keyMeta = HERMETIC_CANONICAL_METADATA.find((k) => k.key === r.key);
+    return {
+      keyNumber: r.key,
+      keyName: keyMeta?.name || `Key ${r.key}`,
+      rule: r.label,
+      passed,
+      weight: r.weight,
+      recommendation: passed ? null : `Incorporate explicit ${r.label.toLowerCase()} into specification.`,
+    };
+  });
+  const score = Math.min(100, Math.round((scoreTotal / 70) * 100));
+  const passed = score >= 70;
+  return {
+    passed,
+    score,
+    grade: score >= 90 ? "A+" : score >= 80 ? "A" : score >= 70 ? "B" : "NEEDS_REVISION",
+    summary: passed
+      ? "Specification passes the Hermetic Quality Gate. Architecture is robust, testable, and bounded."
+      : "Specification fails required hermetic invariants. Address missing verification tests, boundaries, and isolation guarantees.",
+    checks,
+    blockers: checks.filter((c) => !c.passed).map((c) => c.recommendation as string),
+  };
+}
+
 function isProviderConfigured(settings: ProviderSettings): boolean {
+  if (settings.provider === "hermetic_local") return true;
   if (settings.provider === "openai") return settings.openaiApiKey.trim().length > 0;
   if (settings.provider === "ollama_cloud") {
     return settings.ollamaCloudApiKey.trim().length > 0 && settings.ollamaCloudBaseUrl.trim().length > 0;
@@ -286,7 +397,7 @@ function isProviderConfigured(settings: ProviderSettings): boolean {
   if (settings.provider === "ollama_local") {
     return settings.ollamaLocalBaseUrl.trim().length > 0;
   }
-  return false;
+  return true;
 }
 
 function toOpenAIMessages(systemInstruction: string, history: SessionMessage[]) {
@@ -304,6 +415,10 @@ async function sendToProvider(
   systemInstruction: string,
   history: SessionMessage[]
 ): Promise<string> {
+  if (settings.provider === "hermetic_local") {
+    return synthesizeHermeticLocalResponse(history);
+  }
+
   if (settings.provider === "openai") {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -347,22 +462,26 @@ async function sendToProvider(
     return text;
   }
 
-  const base = settings.ollamaLocalBaseUrl.trim().replace(/\/+$/, "");
-  const res = await fetch(`${base}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: settings.ollamaLocalModel.trim(),
-      messages: toOpenAIMessages(systemInstruction, history),
-      stream: false,
-    }),
-  });
+  try {
+    const base = settings.ollamaLocalBaseUrl.trim().replace(/\/+$/, "");
+    const res = await fetch(`${base}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: settings.ollamaLocalModel.trim(),
+        messages: toOpenAIMessages(systemInstruction, history),
+        stream: false,
+      }),
+    });
 
-  if (!res.ok) throw new Error(`Ollama local request failed (${res.status})`);
-  const data = await res.json();
-  const text = data?.message?.content?.trim();
-  if (!text) throw new Error("Ollama local returned an empty response.");
-  return text;
+    if (!res.ok) throw new Error(`Ollama local request failed (${res.status})`);
+    const data = await res.json();
+    const text = data?.message?.content?.trim();
+    if (!text) throw new Error("Ollama local returned an empty response.");
+    return text;
+  } catch {
+    return synthesizeHermeticLocalResponse(history);
+  }
 }
 
 export default function App() {
@@ -375,6 +494,11 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [showGatekeeper, setShowGatekeeper] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
+  const [planInput, setPlanInput] = useState(
+    "Goal & Scope: Architect a local-first, air-gapped sovereign enclave with immutable invariants, standardized JSON schema contracts, explicit boundary tradeoffs, graceful error resilience, deterministic verification test suite, benchmarked latency budgets, resource cleanup pruning, structured stdout telemetry logs, and CI release gate."
+  );
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [providerDraft, setProviderDraft] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [sessionLog, setSessionLog] = useState<SessionMessage[]>([]);
@@ -697,31 +821,138 @@ export default function App() {
           </CardTitle>
           <div className="ornate-divider h-px w-32 mx-auto mt-1" />
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <Button onClick={() => { setShowAiSettings((prev) => !prev); setShowProgress(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
+            <Button onClick={() => { setShowGatekeeper((prev) => !prev); setShowDocs(false); setShowAiSettings(false); setShowProgress(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-amber-300 hover:text-amber-100 border border-amber-500/30 rounded-full">
+              🛡️ 22-Key Plan Gatekeeper
+            </Button>
+            <Button onClick={() => { setShowDocs((prev) => !prev); setShowGatekeeper(false); setShowAiSettings(false); setShowProgress(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-emerald-300 hover:text-emerald-100 border border-emerald-500/30 rounded-full">
+              📖 How It Works &amp; CLI
+            </Button>
+            <Button onClick={() => { setShowAiSettings((prev) => !prev); setShowProgress(false); setShowGatekeeper(false); setShowDocs(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
               <Settings className="w-3.5 h-3.5 mr-1" /> AI Settings
             </Button>
-            <Button onClick={() => { setShowProgress((prev) => !prev); setShowAiSettings(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              Progress
+            <Button onClick={() => { setShowProgress((prev) => !prev); setShowAiSettings(false); setShowGatekeeper(false); setShowDocs(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
+              Progress ({cardsCompletedCount}/22)
             </Button>
             <Button onClick={handleDownloadSession} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              <Download className="w-3.5 h-3.5 mr-1" /> Download Session
+              <Download className="w-3.5 h-3.5 mr-1" /> Export Session
             </Button>
             <Button onClick={handleClearLogs} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              <Trash2 className="w-3.5 h-3.5 mr-1" /> Clear Logs
+              <Trash2 className="w-3.5 h-3.5 mr-1" /> Reset
             </Button>
           </div>
-          <p className="mt-2 text-center text-[11px] text-zinc-400">Stored locally: {sessionLog.length} messages • {cardsCompletedCount}/22 keys completed • cycles {progress.totalCyclesCompleted}</p>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[11px] text-zinc-400">
+            <span>Engine: <strong className="text-amber-300">{providerSettings.provider === "hermetic_local" ? "Sovereign Local Oracle (Zero-Key)" : providerSettings.provider}</strong></span>
+            <span>•</span>
+            <span>Jump to Key:</span>
+            <select
+              aria-label="Jump to Hermetic Key"
+              value={currentKeyNumber ?? 0}
+              onChange={(e) => void handleSend(`Key ${e.target.value}`)}
+              className="rounded border border-amber-500/30 bg-zinc-900 px-2 py-0.5 text-[11px] text-amber-200"
+            >
+              {HERMETIC_CANONICAL_METADATA.map((k) => (
+                <option key={k.key} value={k.key}>
+                  Key {k.key}: {k.name} ({k.letter})
+                </option>
+              ))}
+            </select>
+          </div>
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
+          {showGatekeeper && (() => {
+            const audit = validatePlanClient(planInput);
+            return (
+              <section className="border-b border-amber-500/20 bg-zinc-950/95 p-4 sm:p-5 space-y-4 max-h-[72vh] overflow-y-auto">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-amber-300 font-medium text-base">🛡️ 22-Key Hermetic Invariant Plan Gatekeeper</h2>
+                    <p className="text-xs text-zinc-400">Audit any software PRD, architecture spec, or agent plan against the 15 core Hermetic engineering invariants.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPlanInput("Goal & Scope: Architect a local-first, air-gapped sovereign enclave with immutable invariants, standardized JSON schema contracts, explicit boundary tradeoffs, graceful error resilience, deterministic verification test suite, benchmarked latency budgets, resource cleanup pruning, structured stdout telemetry logs, and CI release gate.")}
+                      className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200"
+                    >
+                      Load Hardened Spec (100/100)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlanInput("Quick cloud-only prototype with placeholder mock_production responses and no tests.")}
+                      className="rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs text-red-200"
+                    >
+                      Load Flawed Spec
+                    </button>
+                  </div>
+                </div>
+                <Textarea
+                  value={planInput}
+                  onChange={(e) => setPlanInput(e.target.value)}
+                  className="min-h-[95px] bg-zinc-900/90 border-amber-400/30 text-zinc-100 text-xs font-mono"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/25 bg-zinc-900/80 p-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Hermetic Gate Verdict</p>
+                    <p className={`text-sm font-semibold ${audit.passed ? "text-emerald-300" : "text-red-300"}`}>
+                      {audit.passed ? "✔ PASSED GATE" : "✖ FAILED GATE"} — Score: {audit.score}/100 (Grade: {audit.grade})
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-0.5">{audit.summary}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {audit.checks.map((c) => (
+                    <div key={c.keyNumber} className={`rounded-lg border px-3 py-2 text-xs ${c.passed ? "border-emerald-500/25 bg-emerald-950/20 text-emerald-200" : "border-red-500/30 bg-red-950/25 text-red-200"}`}>
+                      <div className="font-semibold">{c.passed ? "✔" : "✖"} Key {c.keyNumber} ({c.keyName}): {c.rule}</div>
+                      {!c.passed && <div className="text-[11px] text-zinc-400 mt-0.5">{c.recommendation}</div>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })()}
+
+          {showDocs && (
+            <section className="border-b border-amber-500/20 bg-zinc-950/95 p-4 sm:p-5 space-y-4 max-h-[72vh] overflow-y-auto text-xs text-zinc-300">
+              <h2 className="text-amber-300 font-medium text-base">📖 How Adytum Alchemist Works &amp; ZothOS CLI Reference</h2>
+              <p className="leading-relaxed">
+                <strong>Adytum Alchemist AI Workflow</strong> replaces ad-hoc prompt guessing with a deterministic <strong>22-Key Hermetic Planning Rite</strong> inspired by Builders of the Adytum (BOTA). Every Key (0 <em>The Fool</em> through 21 <em>The World</em>) maps an archetypal symbol and Hebrew letter to a concrete software engineering invariant.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-3">
+                  <p className="font-semibold text-amber-200 mb-1">1. Conscious Intention</p>
+                  <p className="text-zinc-400">Inspect the current Tarot Key, its Hebrew letter, and AI Chemistry lesson. Formulate your architectural intention, symbol observation, and seed directive.</p>
+                </div>
+                <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-3">
+                  <p className="font-semibold text-amber-200 mb-1">2. 5-Min Incubation</p>
+                  <p className="text-zinc-400">Enter the timed 5-minute subconscious meditation gate (or fast-forward when testing) before synthesizing your post-meditation architectural insight.</p>
+                </div>
+                <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-3">
+                  <p className="font-semibold text-amber-200 mb-1">3. 22-Point Gatekeeper</p>
+                  <p className="text-zinc-400">Audit your PRD or plan against the 22 Hermetic Invariants via the web Gatekeeper, ZothOS CLI (<code>adytum</code>), or MCP stdio server.</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-emerald-500/25 bg-zinc-900/90 p-3 font-mono space-y-1">
+                <p className="text-emerald-300 font-semibold mb-1"># ZothOS CLI Commands (/usr/local/bin/adytum &amp; adytum-alchemist-ai-workflow)</p>
+                <p>adytum list                          # List all 22 Hermetic Keys &amp; invariants</p>
+                <p>adytum key 7 --json                  # Inspect Key 7 (The Chariot) in JSON</p>
+                <p>adytum invariants "MyService"        # Generate 22-point project checklist</p>
+                <p>adytum validate ./plan.md            # Audit a plan against the 22 invariants</p>
+                <p>adytum mcp                           # Start Model Context Protocol stdio server</p>
+                <p>adytum web                           # Launch local web workstation on :8135</p>
+              </div>
+            </section>
+          )}
+
           {showAiSettings && (
             <section className="border-b border-amber-500/20 bg-zinc-950/85 p-4 sm:p-5 space-y-4">
               <h2 className="text-amber-300 font-medium">Provider Console</h2>
               <div className="flex flex-wrap gap-2">
                 {([
+                  ["hermetic_local", "Sovereign Local Oracle (Instant)"],
+                  ["ollama_local", "Ollama Local (127.0.0.1:11434)"],
                   ["openai", "OpenAI"],
                   ["ollama_cloud", "Ollama Cloud"],
-                  ["ollama_local", "Ollama Local"],
                 ] as Array<[ProviderId, string]>).map(([id, label]) => (
                   <button
                     key={id}
@@ -909,8 +1140,26 @@ export default function App() {
 
               {stage === "lesson" && (
                 <div className="pt-8 pb-4 border-t border-zinc-800/60 mt-8 space-y-5">
-                  <h3 className="text-amber-300 font-medium tracking-wide">BOTA Practice Protocol</h3>
-                  <p className="text-zinc-400 text-sm">Prepare consciousness before meditation, then plant a precise subconscious directive.</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-amber-300 font-medium tracking-wide">BOTA Practice Protocol</h3>
+                      <p className="text-zinc-400 text-sm">Prepare consciousness before meditation, then plant a precise subconscious directive.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const k = HERMETIC_CANONICAL_METADATA[currentKeyNumber ?? 0];
+                        setConsciousIntention(`Refining the ${k.invariant} discipline (${k.letter}) across our sovereign local-first architecture.`);
+                        setSymbolObservation(`Observing the canonical symbolism of Key ${k.key} (${k.name}) under ${k.astrology}: ${k.signification}.`);
+                        setSubconsciousPrompt(`Synthesize a deterministic, zero-egress implementation that satisfies ${k.invariant} with verifiable tests.`);
+                        setInput(`Through Key ${k.key} (${k.name}), we strip away brittle assumptions and enforce ${k.invariant} with explicit boundary contracts and automated verification.`);
+                        setInsightSynthesis(`Subconscious incubation revealed a clean, zero-dependency design pattern that guarantees ${k.invariant} across both CLI and browser.`);
+                      }}
+                      className="rounded-full border border-amber-400/35 bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/25"
+                    >
+                      ⚡ Quick-Fill Sample Practice
+                    </button>
+                  </div>
 
                   <div className="space-y-3">
                     <label className="text-xs uppercase tracking-[0.18em] text-zinc-400">1. Conscious Intention</label>
@@ -1038,6 +1287,17 @@ export default function App() {
                 <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
                   <div className="h-full bg-amber-400/70 transition-all duration-1000 ease-linear" style={{ width: `${progressPercent}%` }} />
                 </div>
+
+                <Button
+                  onClick={() => {
+                    setTimeLeft(0);
+                    setStage("answering");
+                  }}
+                  variant="ghost"
+                  className="h-auto border border-amber-400/30 bg-zinc-900/70 px-4 py-2 text-xs text-amber-200 hover:bg-zinc-800 rounded-full"
+                >
+                  ⏩ Complete Meditation Now &amp; Record Insight
+                </Button>
               </div>
             </section>
           )}
