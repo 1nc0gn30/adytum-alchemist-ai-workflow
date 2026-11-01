@@ -163,4 +163,4 @@ All ZothOS and NullAI tools are **100% free, open, and unlocked by default** wit
 
 ---
 
-**Engineered by Neal Frazier Tech ([@1nc0gn30](https://github.com/1nc0gn30)) • [NullAI Platform](https://nullai.tech)**
+**Engineered by 1nc0gn30 • NullAI ([@1nc0gn30](https://github.com/1nc0gn30)) • [NullAI Platform](https://nullai.tech)**

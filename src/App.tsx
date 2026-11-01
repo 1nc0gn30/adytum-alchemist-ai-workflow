@@ -1190,7 +1190,7 @@ adytum mcp                       # Start MCP stdio agent server`}
       <footer className="border-t border-amber-500/15 bg-zinc-950/90 px-4 py-3 mt-auto">
         <div className="max-w-[1480px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-400">
           <div className="flex items-center gap-2 flex-wrap">
-            <span>Engineered by <strong className="text-zinc-200">Neal Frazier Tech (@1nc0gn30)</strong> • NullAI Platform</span>
+            <span>Engineered by <strong className="text-zinc-200">1nc0gn30 (@1nc0gn30)</strong> • NullAI Platform</span>
             <span>•</span>
             <span className="text-emerald-300 font-mono text-[11px]">100% Free &amp; Open-Access Sovereign Tool</span>
           </div>

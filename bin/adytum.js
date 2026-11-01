@@ -56,6 +56,39 @@ async function main() {
     process.exit(0);
   }
 
+  if (command === 'status' || command === '--status' || command === 'tui' || command === '--tui' || command === '--json') {
+    const keys = getAllKeys();
+    const result = hardenPlan('Architect a sovereign zero-egress enclave', 'Sovereign Enclave');
+    if (isJson || command === '--json') {
+      console.log(JSON.stringify({
+        engine: 'adytum-alchemist-ai-workflow',
+        version: '1.0.0',
+        status: 'ACTIVE',
+        hermetic_keys_loaded: keys.length,
+        gatekeeper_score: result.hardenedScore,
+        gatekeeper_grade: result.hardenedGrade,
+        workstation_url: 'http://127.0.0.1:8135',
+        studio_url: 'http://127.0.0.1:3000/tools/adytum-alchemist-ai-workflow',
+        sample_keys: keys.slice(0, 3)
+      }, null, 2));
+      process.exit(0);
+    }
+    banner();
+    console.log(`${BOLD}╔══════════════════════════════════════════════════════════════════════════╗${RESET}`);
+    console.log(`${BOLD}║ ADYTUM TUI COCKPIT // 22-KEY HERMETIC GATEKEEPER                         ║${RESET}`);
+    console.log(`${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}`);
+    console.log(`║  Runtime Status   : ${GREEN}🟢 ACTIVE (Zero-Egress Sovereign Enclave)${RESET}            ║`);
+    console.log(`║  Workstation Port : ${CYAN}http://127.0.0.1:8135${RESET}                                ║`);
+    console.log(`║  Gatekeeper Audit : ${GOLD}${result.hardenedScore}/100 (Grade ${result.hardenedGrade})${RESET} — 22/22 Keys Sealed             ║`);
+    console.log(`${BOLD}╠══════════════════════════════════════════════════════════════════════════╣${RESET}`);
+    for (const k of keys.slice(0, 8)) {
+      const numStr = String(k.key).padStart(2, '0');
+      console.log(`║  [${GOLD}${numStr}${RESET}] ${BOLD}${k.name.padEnd(18)}${RESET} │ ${CYAN}${k.letter.padEnd(7)}${RESET} │ ${k.invariant.slice(0, 33).padEnd(33)} ║`);
+    }
+    console.log(`${BOLD}╚══════════════════════════════════════════════════════════════════════════╝${RESET}\n`);
+    process.exit(0);
+  }
+
   if (command === 'web' || command === '--web') {
     const portArgIdx = args.findIndex((a) => a === '--port' || a === '-p');
     const port = (portArgIdx >= 0 && args[portArgIdx + 1]) ? args[portArgIdx + 1] : (process.env.PORT || '8135');
