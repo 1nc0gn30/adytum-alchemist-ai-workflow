@@ -37,7 +37,7 @@ A dark UI tarot initiation app that guides the user from Key 0 to Key 21 with st
 - Netlify build command: `npm run build`
 - Publish directory: `dist`
 - Canonical production domain is configured for:
-  `https://adytum-alchemist-guide.nealfrazier.tech/`
+  `https://adytum-alchemist-guide.1nc0gn30.si/`
 - SEO files are included in `public/`:
 - `robots.txt` and `sitemap.xml`
 
@@ -54,4 +54,4 @@ See `.env.example` for optional variables used by providers.
 
 ## Author
 
-Neal Frazier
+1nc0gn30
