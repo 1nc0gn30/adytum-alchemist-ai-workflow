@@ -367,6 +367,7 @@ async function sendToProvider(
 
 export default function App() {
   const [stage, setStage] = useState<AppStage>("welcome");
+  const [selectedPreviewKey, setSelectedPreviewKey] = useState<number>(0);
   const [currentMessage, setCurrentMessage] = useState<string>("");
   const [input, setInput] = useState("");
   const [providerError, setProviderError] = useState("");
@@ -842,32 +843,113 @@ export default function App() {
           )}
 
           {stage === "welcome" && (
-            <section className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center space-y-9 animate-in fade-in duration-1000">
-              <div className="relative w-24 h-24 rounded-full border border-amber-400/35 flex items-center justify-center bg-zinc-950/70 shadow-[0_0_40px_rgba(245,158,11,0.17)]">
-                <div className="absolute inset-0 rounded-full border border-amber-300/25 animate-ping [animation-duration:2.8s]" />
-                <Sun className="w-11 h-11 text-amber-300" />
+            <section className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-5 items-start">
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/70 p-3 space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-xs uppercase tracking-[0.18em] text-amber-300 font-medium">22 Major Arcana Deck</h2>
+                  <span className="text-[11px] text-zinc-400">{cardsCompletedCount}/22 Done</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-1.5 max-h-[340px] lg:max-h-[540px] overflow-y-auto pr-1">
+                  {Object.entries(TAROT_CARD_NAMES).map(([k, name]) => {
+                    const keyNum = Number(k);
+                    const isSelected = selectedPreviewKey === keyNum;
+                    const done = progress.cards[keyNum]?.completed;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setSelectedPreviewKey(keyNum)}
+                        className={`text-left px-2.5 py-2 rounded-lg border text-xs transition flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? "border-amber-400/70 bg-amber-500/15 text-amber-200"
+                            : "border-zinc-800/80 bg-zinc-900/50 text-zinc-300 hover:border-amber-400/35"
+                        }`}
+                      >
+                        <span className="truncate">
+                          <span className="text-amber-400/80 mr-1.5">{k}.</span>
+                          {name}
+                        </span>
+                        {done && <span className="text-[10px] text-emerald-300 shrink-0">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="space-y-4 max-w-xl">
-                <h1 className="text-3xl sm:text-4xl font-heading text-zinc-50 tracking-wide">The Great Work Begins</h1>
-                <p className="text-zinc-300/90 leading-relaxed text-[15px] sm:text-base">
-                  Welcome, Aspirant. You are about to embark upon a sequential initiation through the 22 Keys of the Tarot,
-                  translating ancient esoteric wisdom into the modern practice of AI Chemistry.
-                </p>
-                <p className="text-zinc-400/95 leading-relaxed text-[15px] sm:text-base">
-                  Provider can be changed at any time. Session logs persist locally and are reused as context in every request.
-                </p>
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+                  <img
+                    src={TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg"}
+                    alt={`Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey] ?? "Tarot Key"}`}
+                    className="w-40 sm:w-44 rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
+                  />
+                  <div className="space-y-3 text-center sm:text-left">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-300">
+                      <Sun className="w-3.5 h-3.5" />
+                      Key {selectedPreviewKey} of 21
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl font-heading text-zinc-50 tracking-wide">
+                      {TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool"}
+                    </h1>
+                    <p className="text-zinc-300/90 leading-relaxed text-sm sm:text-[15px]">
+                      Active Hermetic &amp; AI Chemistry Workbench. Study Key {selectedPreviewKey} directly in-browser with the
+                      BOTA 5-minute contemplation protocol, or connect an AI provider for guided Socratic initiation.
+                    </p>
+                    <div className="flex flex-wrap justify-center sm:justify-start gap-2.5 pt-1">
+                      <Button
+                        onClick={() => {
+                          const keyName = TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool";
+                          const imgPath = TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg";
+                          const localLesson = [
+                            `# Key ${selectedPreviewKey}: ${keyName}`,
+                            "",
+                            `![Key ${selectedPreviewKey}: ${keyName}](${imgPath})`,
+                            "",
+                            `### Esoteric & AI Chemistry Synthesis`,
+                            `- **Archetype:** Key ${selectedPreviewKey} — *${keyName}*`,
+                            `- **Contemplation Focus:** Observe the primary symbols in the tableau and map how this principle governs signal, attention, and transformation in your current workflow.`,
+                            `- **Practice:** Record your Conscious Intention, Symbol Observation, and Subconscious Prompt below, then begin the 5-minute BOTA contemplation timer.`,
+                          ].join("\n");
+                          setCurrentMessage(localLesson);
+                          setStage("lesson");
+                          setProgress((prev) => ({
+                            ...prev,
+                            cards: {
+                              ...prev.cards,
+                              [selectedPreviewKey]: {
+                                ...prev.cards[selectedPreviewKey],
+                                lessonsOpened: (prev.cards[selectedPreviewKey]?.lessonsOpened ?? 0) + 1,
+                              },
+                            },
+                          }));
+                        }}
+                        className="h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2.5 text-sm rounded-full font-medium"
+                      >
+                        Open Key in Workbench
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (!providerReady) {
+                            setShowAiSettings(true);
+                          } else {
+                            void handleSend(`Start Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey]}`);
+                          }
+                        }}
+                        disabled={isLoadingTarotReference || isSending}
+                        className="h-auto border-amber-400/35 bg-zinc-900/70 hover:bg-zinc-800 text-amber-200 px-5 py-2.5 text-sm rounded-full"
+                      >
+                        {isLoadingTarotReference || isSending
+                          ? "Preparing Oracle..."
+                          : providerReady
+                            ? "Begin AI Initiation"
+                            : "Configure AI Provider"}
+                      </Button>
+                    </div>
+                    {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
+                  </div>
+                </div>
               </div>
-
-              <Button
-                onClick={() => void handleSend("Start")}
-                disabled={!providerReady || isLoadingTarotReference || isSending}
-                className="h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-8 py-4 text-base sm:text-lg rounded-full border border-amber-100/20 shadow-[0_0_24px_rgba(245,158,11,0.3)] transition-all hover:shadow-[0_0_36px_rgba(245,158,11,0.42)] focus-visible:ring-amber-200/50"
-              >
-                {isLoadingTarotReference || isSending ? "Preparing Oracle..." : "Begin Initiation"}
-              </Button>
-              {!providerReady && <p className="text-red-300 text-sm">Open AI settings and configure your active provider first.</p>}
-              {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
             </section>
           )}
 
