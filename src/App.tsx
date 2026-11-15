@@ -107,6 +107,39 @@ const TAROT_CARD_NAMES: Record<number, string> = {
   21: "The World",
 };
 
+type HermeticCorrespondence = {
+  letter: string;
+  gematria: number;
+  gate: string;
+  phase: string;
+  directive: string;
+};
+
+const HERMETIC_CORRESPONDENCES: Record<number, HermeticCorrespondence> = {
+  0: { letter: "Aleph (א)", gematria: 1, gate: "Air / Pneuma", phase: "Pure Potentiality & Unbounded Ideation", directive: "Strip all inherited assumptions; define the irreducible sovereign objective." },
+  1: { letter: "Beth (ב)", gematria: 2, gate: "Mercury / Logos", phase: "Focused Intention & Single-Pointed Execution", directive: "Bind local CLI tools, MCP endpoints, and hardware compute to a single unambiguous goal." },
+  2: { letter: "Gimel (ג)", gematria: 3, gate: "Moon / Memory", phase: "Cryptographic Memory & Zero-Leak Storage", directive: "Preserve state across sessions in deterministic local stores with zero unauthorized egress." },
+  3: { letter: "Daleth (ד)", gematria: 4, gate: "Venus / Door", phase: "Generative Architecture & Organic Scalability", directive: "Compose clean primitives that multiply downstream capability without brittle coupling." },
+  4: { letter: "Heh (ה)", gematria: 5, gate: "Aries / Sight", phase: "Immutable Invariants & Structural Governance", directive: "Enforce strict schemas and constitutional assertions at every system boundary." },
+  5: { letter: "Vav (ו)", gematria: 6, gate: "Taurus / Nail", phase: "Standardized Contracts & Semantic Schemas", directive: "Expose canonical JSON-RPC / MCP and CLI contracts so humans and agents interoperate cleanly." },
+  6: { letter: "Zain (ז)", gematria: 7, gate: "Gemini / Sword", phase: "Binary Tradeoff Discipline & Clean Boundaries", directive: "State explicit non-goals, security separations, and architectural tradeoffs." },
+  7: { letter: "Cheth (ח)", gematria: 8, gate: "Cancer / Armor", phase: "Air-Gapped Isolation & Sandbox Enclosures", directive: "Lock the execution harness to loopback silicon (127.0.0.1) with 100% offline capability." },
+  8: { letter: "Teth (ט)", gematria: 9, gate: "Leo / Serpent", phase: "Graceful Error Handling & Self-Healing Loops", directive: "Wrap subprocesses, ports, and model calls in bounded retry and deterministic fallback loops." },
+  9: { letter: "Yod (י)", gematria: 10, gate: "Virgo / Lantern", phase: "Deterministic Verification & Zero-Dependency Audits", directive: "Prove runtime behavior with self-contained smoke tests rather than trusting documentation." },
+  10: { letter: "Kaph (כ)", gematria: 20, gate: "Jupiter / Cycle", phase: "State Loop Determinism & Replayability", directive: "Ensure event loops and state transitions resume idempotently across restarts." },
+  11: { letter: "Lamed (ל)", gematria: 30, gate: "Libra / Scales", phase: "Strict Verification Tests & Equilibrated Budgets", directive: "Enforce concrete latency, memory, and accuracy budgets with automated assertions." },
+  12: { letter: "Mem (מ)", gematria: 40, gate: "Water / Reversal", phase: "Asynchronous Non-Blocking Flow & Calm Pacing", directive: "Replace busy polling and blocking bottlenecks with reactive event-driven wakeups." },
+  13: { letter: "Nun (נ)", gematria: 50, gate: "Scorpio / Transformation", phase: "Ruthless Cruft Pruning & Resource Cleanup", directive: "Prune dead state, zombie processes, stale caches, and legacy paywall clutter." },
+  14: { letter: "Samekh (ס)", gematria: 60, gate: "Sagittarius / Synthesis", phase: "Rate-Limiting & High-Concurrence Harmony", directive: "Harmonize CLI backend and browser UI in calibrated equilibrium without state drift." },
+  15: { letter: "Ayin (ע)", gematria: 70, gate: "Capricorn / Eye", phase: "Anti-Deception Audit & Elimination of Mock State", directive: "Banish fake placeholders, mock responses, and misleading cipher labels." },
+  16: { letter: "Peh (פ)", gematria: 80, gate: "Mars / Lightning", phase: "Chaos Resilience & Graceful Crash Recovery", directive: "Test fault injection and atomic writes so abrupt termination never corrupts user state." },
+  17: { letter: "Tzaddi (צ)", gematria: 90, gate: "Aquarius / Star", phase: "Transparent Telemetry & Clear Logging", directive: "Provide structured diagnostics (/health, --json) so operators see live health in <5s." },
+  18: { letter: "Qoph (ק)", gematria: 100, gate: "Pisces / Soma", phase: "Deep Synaptic Retention & Subconscious Caches", directive: "Preserve lineage history and user artifacts seamlessly across upgrades." },
+  19: { letter: "Resh (ר)", gematria: 200, gate: "Sun / Radiance", phase: "Production-Grade Elegance & High-Fidelity UI", directive: "Deliver high-contrast, responsive UI across mobile, tablet, and desktop viewports." },
+  20: { letter: "Shin (ש)", gematria: 300, gate: "Fire / Awakening", phase: "Comprehensive Integration Sentinel & Release Gate", directive: "Verify README, in-app docs, CLI --help, and live UI parity before release." },
+  21: { letter: "Tav (ת)", gematria: 400, gate: "Saturn / Crown", phase: "Hermetic Sovereign Wholeness & Zero-Egress Proof", directive: "Seal the compiled artifact, emit deterministic manifest, and ship 100% open-access." },
+};
+
 const TAROT_NAME_TO_NUMBER: Record<string, number> = {
   fool: 0,
   magician: 1,
@@ -376,6 +409,7 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
+  const [showCanonicalPreview, setShowCanonicalPreview] = useState(false);
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [providerDraft, setProviderDraft] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [sessionLog, setSessionLog] = useState<SessionMessage[]>([]);
@@ -493,6 +527,8 @@ export default function App() {
   const progressPercent = (timeLeft / MEDITATION_TIME_SECONDS) * 100;
   const currentCardLabel = currentKeyNumber !== null ? TAROT_CARD_NAMES[currentKeyNumber] : "Current Key";
   const referenceExcerpt = getCompleteCanonicalSection(tarotReferenceText, currentKeyNumber);
+  const selectedCorrespondence = HERMETIC_CORRESPONDENCES[selectedPreviewKey] ?? HERMETIC_CORRESPONDENCES[0];
+  const previewExcerpt = getCompleteCanonicalSection(tarotReferenceText, selectedPreviewKey);
 
   const handleProviderSave = () => {
     setProviderSettings({ ...providerDraft });
@@ -843,7 +879,7 @@ export default function App() {
           )}
 
           {stage === "welcome" && (
-            <section className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-5 items-start">
+            <section className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-5 items-start">
               <div className="rounded-xl border border-amber-400/20 bg-zinc-950/70 p-3 space-y-2.5">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-xs uppercase tracking-[0.18em] text-amber-300 font-medium">22 Major Arcana Deck</h2>
@@ -905,10 +941,14 @@ export default function App() {
                             "",
                             `![Key ${selectedPreviewKey}: ${keyName}](${imgPath})`,
                             "",
-                            `### Esoteric & AI Chemistry Synthesis`,
-                            `- **Archetype:** Key ${selectedPreviewKey} — *${keyName}*`,
-                            `- **Contemplation Focus:** Observe the primary symbols in the tableau and map how this principle governs signal, attention, and transformation in your current workflow.`,
-                            `- **Practice:** Record your Conscious Intention, Symbol Observation, and Subconscious Prompt below, then begin the 5-minute BOTA contemplation timer.`,
+                            `### Hermetic & Architectural Correspondence`,
+                            `- **Hebrew Letter & Gematria:** ${selectedCorrespondence.letter} · ${selectedCorrespondence.gematria}`,
+                            `- **Planetary / Elemental Gate:** ${selectedCorrespondence.gate}`,
+                            `- **Engineering Phase:** ${selectedCorrespondence.phase}`,
+                            `- **Architectural Directive:** ${selectedCorrespondence.directive}`,
+                            "",
+                            `### Practice`,
+                            `Record your Conscious Intention, Symbol Observation, and Subconscious Directive below, then begin the 5-minute BOTA contemplation timer.`,
                           ].join("\n");
                           setCurrentMessage(localLesson);
                           setStage("lesson");
@@ -949,6 +989,60 @@ export default function App() {
                     {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
                   </div>
                 </div>
+
+                {/* Hermetic & Architectural Correspondence Matrix */}
+                <div className="rounded-lg border border-amber-400/20 bg-zinc-900/55 p-3.5 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-amber-300 font-medium">
+                      Hermetic &amp; Architectural Correspondence
+                    </span>
+                    <span className="text-[11px] text-zinc-400 font-mono">
+                      Key {selectedPreviewKey} · {selectedCorrespondence.gate}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Hebrew Letter</p>
+                      <p className="text-amber-200 font-medium mt-0.5">{selectedCorrespondence.letter}</p>
+                    </div>
+                    <div className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Gematria</p>
+                      <p className="text-amber-200 font-mono font-medium mt-0.5">{selectedCorrespondence.gematria}</p>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1 rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Gate</p>
+                      <p className="text-zinc-200 font-medium mt-0.5">{selectedCorrespondence.gate}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs space-y-1">
+                    <p className="text-amber-200/90 font-medium">{selectedCorrespondence.phase}</p>
+                    <p className="text-zinc-400 leading-relaxed">{selectedCorrespondence.directive}</p>
+                  </div>
+                </div>
+
+                {/* Collapsible Canonical BOTA Study Excerpt Preview */}
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-300 font-medium">
+                      Canonical BOTA Study Excerpt
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowCanonicalPreview((prev) => !prev)}
+                      className="h-auto px-2.5 py-1 text-[11px] text-amber-300 hover:text-amber-200"
+                    >
+                      {showCanonicalPreview ? "Hide Excerpt" : "Read Canonical Text"}
+                    </Button>
+                  </div>
+                  {showCanonicalPreview && (
+                    <div className="max-h-56 overflow-y-auto rounded-md border border-amber-400/20 bg-zinc-950/75 p-3">
+                      <pre className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-300/90 font-sans">
+                        {previewExcerpt || "Loading canonical BOTA text (/tarot/info.txt)..."}
+                      </pre>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
           )}
@@ -966,6 +1060,19 @@ export default function App() {
 
           {(stage === "lesson" || stage === "answering" || stage === "reflection_needed") && (
             <section ref={scrollRef} className="flex-1 overflow-y-auto p-6 sm:p-9 space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800/70">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setStage("welcome")}
+                  className="h-auto px-3 py-1.5 text-xs text-amber-300 hover:text-amber-200"
+                >
+                  ← All 22 Keys (Deck)
+                </Button>
+                <span className="text-[11px] font-mono text-zinc-400">
+                  {currentCardLabel} · {cardsCompletedCount}/22 Complete
+                </span>
+              </div>
               {stage === "reflection_needed" && (
                 <div className="bg-red-950/30 border border-red-800/55 rounded-xl p-4 mb-6 flex items-start gap-3">
                   <Lock className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -1124,6 +1231,39 @@ export default function App() {
             </section>
           )}
         </CardContent>
+        <footer className="border-t border-amber-500/20 bg-zinc-950/85 px-3 py-2 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 z-10">
+          <span className="text-zinc-300">
+            100% Free &amp; Open-Access · Engineered by{" "}
+            <a href="https://github.com/1nc0gn30" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
+              1nc0gn30 (@1nc0gn30)
+            </a>{" "}
+            •{" "}
+            <a href="https://nullai.tech" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
+              NullAI Platform
+            </a>
+          </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <a
+              href="https://github.com/NullAITech/adytum-alchemist-ai-workflow"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-300 hover:text-amber-200 underline-offset-2 hover:underline"
+            >
+              GitHub
+            </a>
+            <a
+              href="https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-full border border-amber-400/35 bg-amber-500/10 px-2.5 py-0.5 text-amber-200 hover:bg-amber-500/20"
+            >
+              ☕ Buy Us a Coffee
+            </a>
+            <span className="font-mono text-[10px] text-zinc-400 break-all" title="Solana Tip Address">
+              SOL: GG2eQbVh8ut1BK6j1A2tz7pSySdLpD38BgyEhGcxdXoK
+            </span>
+          </div>
+        </footer>
       </Card>
     </main>
   );
