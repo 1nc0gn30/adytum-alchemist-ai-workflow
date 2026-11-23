@@ -725,7 +725,7 @@ export default function App() {
       <div className="pointer-events-none absolute -right-44 bottom-16 size-80 rounded-full bg-sky-700/12 blur-3xl" />
 
       <Card className="glass-panel w-full max-w-3xl h-[100dvh] sm:h-[90dvh] flex flex-col rounded-none sm:rounded-[24px] border-0 overflow-hidden relative">
-        <CardHeader className="border-b border-amber-600/20 pb-4 pt-6 sm:pt-5 bg-gradient-to-b from-zinc-950/65 to-zinc-950/20 z-10">
+        <CardHeader className="border-b border-amber-600/20 pb-3 pt-4 sm:pb-4 sm:pt-5 bg-gradient-to-b from-zinc-950/65 to-zinc-950/20 z-10">
           <p className="mx-auto text-[11px] uppercase ritual-text text-amber-300/70">Order of the Great Work</p>
           <CardTitle className="flex items-center justify-center gap-3 text-2xl sm:text-[2rem] font-medium font-heading text-amber-300 tracking-wide">
             <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400/85" />
@@ -879,13 +879,13 @@ export default function App() {
           )}
 
           {stage === "welcome" && (
-            <section className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-5 items-start">
-              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/70 p-3 space-y-2.5">
+            <section className="flex-1 overflow-y-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-3 sm:gap-5 items-start">
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/70 p-2.5 sm:p-3 space-y-2">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-xs uppercase tracking-[0.18em] text-amber-300 font-medium">22 Major Arcana Deck</h2>
                   <span className="text-[11px] text-zinc-400">{cardsCompletedCount}/22 Done</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-1.5 max-h-[340px] lg:max-h-[540px] overflow-y-auto pr-1">
+                <div className="flex flex-nowrap overflow-x-auto gap-1.5 pb-1 lg:grid lg:grid-cols-1 lg:overflow-x-visible lg:overflow-y-auto lg:max-h-[540px] lg:pb-0 lg:pr-1">
                   {Object.entries(TAROT_CARD_NAMES).map(([k, name]) => {
                     const keyNum = Number(k);
                     const isSelected = selectedPreviewKey === keyNum;
@@ -895,13 +895,13 @@ export default function App() {
                         key={k}
                         type="button"
                         onClick={() => setSelectedPreviewKey(keyNum)}
-                        className={`text-left px-2.5 py-2 rounded-lg border text-xs transition flex items-center justify-between gap-2 ${
+                        className={`shrink-0 whitespace-nowrap lg:shrink lg:w-full text-left px-2.5 py-1.5 lg:py-2 rounded-lg border text-xs transition flex items-center justify-between gap-2 ${
                           isSelected
                             ? "border-amber-400/70 bg-amber-500/15 text-amber-200"
                             : "border-zinc-800/80 bg-zinc-900/50 text-zinc-300 hover:border-amber-400/35"
                         }`}
                       >
-                        <span className="truncate">
+                        <span className="lg:truncate">
                           <span className="text-amber-400/80 mr-1.5">{k}.</span>
                           {name}
                         </span>
@@ -912,12 +912,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-5 sm:p-6 space-y-5">
-                <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-4 sm:p-6 space-y-4 sm:space-y-5">
+                <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-center sm:items-start">
                   <img
                     src={TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg"}
                     alt={`Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey] ?? "Tarot Key"}`}
-                    className="w-40 sm:w-44 rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
+                    className="w-32 sm:w-44 rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
                   />
                   <div className="space-y-3 text-center sm:text-left">
                     <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-300">
@@ -1235,7 +1235,7 @@ export default function App() {
           <span className="text-zinc-300">
             100% Free &amp; Open-Access · Engineered by{" "}
             <a href="https://github.com/1nc0gn30" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
-              1nc0gn30 (@1nc0gn30)
+              Neal Frazier Tech (@1nc0gn30)
             </a>{" "}
             •{" "}
             <a href="https://nullai.tech" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">

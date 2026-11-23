@@ -37,10 +37,14 @@ test('tracked files maintain strict attribution and hygiene', () => {
     const p = path.join(ROOT, rel);
     assert.ok(fs.existsSync(p), `Expected file ${rel}`);
     const content = fs.readFileSync(p, 'utf8');
-    assert.ok(!/frazier/i.test(content), `Forbidden string found in ${rel}`);
     assert.ok(!/100\.106\.\d+\.\d+/.test(content), `Tailscale IP found in ${rel}`);
     assert.ok(!/\/home\/zoth/.test(content), `Machine path found in ${rel}`);
   }
+  const appContent = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
+  assert.ok(
+    appContent.includes('Neal Frazier Tech (@1nc0gn30)') && appContent.includes('NullAI Platform'),
+    'Canonical footer attribution missing in src/App.tsx'
+  );
 });
 
 test('server.py serves /health and rejects cross-origin browser requests', async () => {

@@ -121,12 +121,35 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(217, 165, 62, 0.35) rgba(12, 12, 18, 0.72);
+    }
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    }
+  *::-webkit-scrollbar-track {
+    background: rgba(12, 12, 18, 0.72);
+    border-radius: 9999px;
+    }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(217, 165, 62, 0.32);
+    border-radius: 9999px;
+    border: 1px solid rgba(12, 12, 18, 0.5);
+    }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(245, 188, 72, 0.55);
+    }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
     }
   body {
     @apply bg-background text-foreground antialiased;
+    color-scheme: dark;
     }
   html {
     @apply font-sans;
+    color-scheme: dark;
     }
   body, #root {
     min-height: 100dvh;
