@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -20,18 +20,100 @@ function getFreePort() {
   });
 }
 
-test('canonical 22 Major Arcana assets and info.txt exist', () => {
+function readJpegDimensions(filePath) {
+  const buf = fs.readFileSync(filePath);
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) break;
+    const marker = buf[i + 1];
+    const len = buf.readUInt16BE(i + 2);
+    if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+      return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+    }
+    i += 2 + len;
+  }
+  return { width: 0, height: 0 };
+}
+
+test('canonical 22 HD Major Arcana assets, og-banner 1200x630, sitemap lastmod, and info.txt exist', () => {
   const tarotDir = path.join(ROOT, 'public', 'tarot');
   assert.ok(fs.existsSync(tarotDir), 'public/tarot directory missing');
-  const entries = fs.readdirSync(tarotDir);
-  const jpgs = entries.filter((f) => f.endsWith('.jpg'));
+  const jpgs = fs.readdirSync(tarotDir).filter((f) => f.endsWith('.jpg'));
   assert.equal(jpgs.length, 22, `Expected 22 Major Arcana card images, found ${jpgs.length}`);
+
+  const foolDim = readJpegDimensions(path.join(tarotDir, 'fool.jpg'));
+  assert.ok(foolDim.width >= 400, `Expected HD tarot card >=400px wide, got ${foolDim.width}px`);
+
+  const ogPath = path.join(ROOT, 'public', 'og-banner.jpg');
+  assert.ok(fs.existsSync(ogPath), 'public/og-banner.jpg missing');
+  const ogDim = readJpegDimensions(ogPath);
+  assert.equal(ogDim.width, 1200);
+  assert.equal(ogDim.height, 630);
+
+  const sitemap = fs.readFileSync(path.join(ROOT, 'public', 'sitemap.xml'), 'utf8');
+  assert.ok(sitemap.includes('<lastmod>'), 'public/sitemap.xml missing <lastmod>');
+
   const infoPath = path.join(tarotDir, 'info.txt');
   assert.ok(fs.existsSync(infoPath), 'public/tarot/info.txt missing');
   assert.ok(fs.statSync(infoPath).size > 10000, 'public/tarot/info.txt unexpectedly truncated');
 });
 
-test('tracked files maintain strict attribution and hygiene', () => {
+test('exportSanitizer redacts all API secrets and App.tsx uses it on export', () => {
+  const appSrc = fs.readFileSync(path.join(ROOT, 'src', 'App.tsx'), 'utf8');
+  assert.ok(
+    appSrc.includes('sanitizeProviderSettingsForExport(providerSettings)'),
+    'App.tsx handleDownloadSession must sanitize providerSettings'
+  );
+  // Execute the sanitizer logic directly via tsx to verify runtime redaction
+  const out = execFileSync(
+    'npx',
+    [
+      'tsx',
+      '-e',
+      `import { sanitizeProviderSettingsForExport } from './src/lib/exportSanitizer.ts';
+       const safe = sanitizeProviderSettingsForExport({
+         provider: 'openai',
+         openaiApiKey: 'sk-LIVE-SECRET-OPENAI-9999',
+         openaiModel: 'gpt-4.1-mini',
+         ollamaCloudApiKey: 'ol-LIVE-SECRET-CLOUD-8888',
+         ollamaCloudBaseUrl: 'https://ollama.com',
+         ollamaCloudModel: 'llama3.1:8b',
+         ollamaLocalBaseUrl: 'http://127.0.0.1:11434',
+         ollamaLocalModel: 'llama3.1:8b',
+       });
+       console.log(JSON.stringify(safe));`,
+    ],
+    { cwd: ROOT, encoding: 'utf8' }
+  );
+  assert.ok(!out.includes('sk-LIVE-SECRET-OPENAI-9999'), 'OpenAI API key leaked in exported JSON');
+  assert.ok(!out.includes('ol-LIVE-SECRET-CLOUD-8888'), 'Ollama Cloud API key leaked in exported JSON');
+  assert.ok(!out.includes('openaiApiKey'), 'openaiApiKey property present in exported JSON');
+  assert.ok(!out.includes('ollamaCloudApiKey'), 'ollamaCloudApiKey property present in exported JSON');
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.credentialsRedacted, true);
+  assert.equal(parsed.provider, 'openai');
+});
+
+test('adytum CLI exposes real subcommands and rejects unknown commands', () => {
+  const ver = execFileSync('adytum', ['--version'], { encoding: 'utf8' });
+  assert.ok(ver.includes('2.4.0'), `Expected v2.4.0 in CLI version, got ${ver}`);
+
+  const listJson = JSON.parse(execFileSync('adytum', ['list', '--json'], { encoding: 'utf8' }));
+  assert.equal(listJson.count, 22);
+
+  const key7 = JSON.parse(execFileSync('adytum', ['key', '7', '--json'], { encoding: 'utf8' }));
+  assert.equal(key7.name, 'The Chariot');
+
+  let badExit = 0;
+  try {
+    execFileSync('adytum', ['nonexistent-subcommand-xyz'], { stdio: 'pipe' });
+  } catch (err) {
+    badExit = err.status || 1;
+  }
+  assert.notEqual(badExit, 0, 'Unknown CLI subcommand must exit non-zero');
+});
+
+test('tracked files maintain strict attribution, canonical org URL, and hygiene', () => {
   const filesToCheck = ['README.md', 'index.html', 'server.py', 'public/robots.txt', 'public/sitemap.xml', 'src/App.tsx'];
   for (const rel of filesToCheck) {
     const p = path.join(ROOT, rel);
@@ -45,9 +127,13 @@ test('tracked files maintain strict attribution and hygiene', () => {
     appContent.includes('Neal Frazier Tech (@1nc0gn30)') && appContent.includes('NullAI Platform'),
     'Canonical footer attribution missing in src/App.tsx'
   );
+  assert.ok(
+    appContent.includes('https://github.com/1nc0gn30/adytum-alchemist-ai-workflow'),
+    'Canonical GitHub repo URL missing in src/App.tsx'
+  );
 });
 
-test('server.py serves /health and rejects cross-origin browser requests', async () => {
+test('server.py serves /health, /api/keys, POST /api/validate, OPTIONS preflight, and rejects cross-origin', async () => {
   const port = await getFreePort();
   const proc = spawn('python3', [path.join(ROOT, 'server.py'), '--port', String(port)], {
     cwd: ROOT,
@@ -64,6 +150,7 @@ test('server.py serves /health and rejects cross-origin browser requests', async
         if (res.status === 200) {
           const data = await res.json();
           assert.equal(data.status, 'online');
+          assert.equal(data.version, '2.4.0');
           assert.equal(data.arcana_count, 22);
           assert.equal(data.port, port);
           assert.equal(res.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
@@ -80,6 +167,28 @@ test('server.py serves /health and rejects cross-origin browser requests', async
       headers: { Origin: 'https://evil.example' },
     });
     assert.equal(cross.status, 403);
+
+    const opt = await fetch(`http://127.0.0.1:${port}/api/validate`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://127.0.0.1:3000' },
+    });
+    assert.equal(opt.status, 204);
+
+    const keysRes = await fetch(`http://127.0.0.1:${port}/api/keys`);
+    assert.equal(keysRes.status, 200);
+    const keysData = await keysRes.json();
+    assert.equal(keysData.count, 22);
+
+    const valRes = await fetch(`http://127.0.0.1:${port}/api/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Quick cloud-only prototype with no tests or boundaries.' }),
+    });
+    assert.equal(valRes.status, 200);
+    const valData = await valRes.json();
+    assert.equal(valData.passed, false);
+    const key9 = valData.checks.find((c) => c.keyNumber === 9);
+    assert.equal(key9.passed, false);
   } finally {
     proc.kill('SIGTERM');
   }

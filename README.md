@@ -1,38 +1,50 @@
-# Adytum Alchemist Guide (`adytum-alchemist-ai-workflow`)
+# Adytum Planner — 22-Key Hermetic AI Workbench (`adytum-alchemist-ai-workflow`)
 
-Interactive 22 Major Arcana symbolic study workstation, hermetic architectural correspondence matrix, timed BOTA contemplation timer, and reflection-gated curriculum backed by local Ollama or OpenAI-compatible inference endpoints on `127.0.0.1:8135`.
+Local-first 22 Major Arcana symbolic study workbench, offline AI-Chemistry curriculum, 5-minute BOTA contemplation timer, and negation-aware 15-rule architectural invariant gatekeeper running on `127.0.0.1:8135`, ZothOS CLI (`adytum` / `adytum-alchemist-ai-workflow`), and Zoth Studio v2.
 
 ---
 
 ## What It Does
 
-`adytum-alchemist-ai-workflow` guides sequential initiation and architectural contemplation across **Key 0 (`The Fool`)** through **Key 21 (`The World`)**:
-- Displays full-card Major Arcana illustrations (`/tarot/*.jpg`), Hebrew letter attributions (`Aleph`..`Tav`), gematria values, and canonical BOTA reference excerpts (`public/tarot/info.txt`).
-- Provides an interactive **5-Minute Meditation Timer** after recording Conscious Intention, Symbol Observation, and Subconscious Directive prompts.
-- Unlocks local JSON session exports and progress tracking across all 22 keys with **zero paywalls, zero blur locks, and zero external telemetry**.
+`adytum-alchemist-ai-workflow` (`v2.4.0`) unifies three verified surfaces under one identity (**Adytum Planner — 22-Key Hermetic AI Workbench**):
+- **Standalone Web Workbench (`127.0.0.1:8135`)**: Browse all 22 Major Arcana (**Key 0 `The Fool`** → **Key 21 `The World`**) with HD card art (`/tarot/*.jpg`), Hebrew letters, gematria values, offline AI-Chemistry lessons (`src/data/adytumKeys.json`), canonical BOTA study excerpts (`public/tarot/info.txt`), and a pausable 5-minute contemplation timer with optional local Ollama (`127.0.0.1:11434`) Socratic guidance.
+- **Deterministic CLI & Loopback API (`adytum`, `server.py`)**: Query the 22 Hermetic keys (`GET /api/keys`), run negation-aware 15-rule architectural plan audits (`POST /api/validate`, `adytum validate`), and coherently auto-harden specs (`POST /api/harden`, `adytum harden`).
+- **Zoth Studio v2 God-Mode Deck (`/tools/adytum-alchemist-ai-workflow`)**: Adds the interactive Tree of Life lattice, 3D `.glb` Arcana dioramas, LTX-Video 2B loops, and live browser PRD gatekeeper alongside the embedded `:8135` workbench.
 
 ---
 
 ## How It Works
 
-1. **Client-Side 22-Key State Machine (`src/App.tsx`)**: Manages stage progression (`welcome` -> `lesson` -> `meditating` -> `answering` / `reflection_needed`), persists session logs and key metrics strictly in browser `localStorage`, and supports direct study or guided initiation via local Ollama (`http://localhost:11434`), Ollama Cloud, or OpenAI-compatible APIs.
-2. **Loopback Enclave Daemon (`server.py` · `127.0.0.1:8135`)**: Serves compiled static assets (`dist/`) with SPA fallback routing, strict loopback `Origin` verification (`Access-Control-Allow-Origin` limited to `127.0.0.1`/`localhost`), and `GET /health` JSON telemetry.
-3. **Zoth Studio v2 God-Mode Integration**: Synchronizes the same 22-key Hermetic correspondence matrix inside Zoth Studio (`https://zoth.nullai.tech/tools/adytum-alchemist-ai-workflow`) alongside pre-flight architectural invariant auditing.
+1. **Client-Side 22-Key State Machine (`src/App.tsx`)**: Persists session logs and 22-key progress locally in `localStorage`, defaults to local Ollama (`http://127.0.0.1:11434`), works 100% offline via bundled AI-Chemistry lessons, and strips all API credentials via `sanitizeProviderSettingsForExport()` before exporting session JSON.
+2. **Hardened Loopback Enclave Daemon (`server.py` · `127.0.0.1:8135`)**: Serves `dist/` with strict realpath containment (eliminating path-traversal oracles), `urllib.parse` loopback-only `Origin` checks, `OPTIONS` CORS preflight (`204`), `GET /health`, `GET /api/keys`, `POST /api/validate`, and `POST /api/harden`.
+3. **ZothOS CLI (`adytum` & `adytum-alchemist-ai-workflow`)**: Provides real deterministic subcommands synced byte-for-byte across `/usr/local/bin/`, `~/.local/bin/`, and `zoth-os` chroot.
 
 ---
 
-## ZothOS CLI & MCP Commands
+## ZothOS CLI & HTTP API Commands
 
 ```bash
-# Inspect CLI flags and local ZothOS status
-adytum-alchemist-ai-workflow --help
-adytum-alchemist-ai-workflow --status
-adytum-alchemist-ai-workflow --json
-adytum-alchemist-ai-workflow --ui
+# Inspect status, version, and local workbench URL
+adytum --help
+adytum --version
+adytum --status
+adytum --json
+adytum --ui
 
-# Start the standalone loopback workstation daemon (:8135)
-python3 server.py --port 8135
+# Real 22-Key Hermetic Planning CLI subcommands
+adytum list                                  # List all 22 Hermetic Keys & directives
+adytum key 7 --json                          # Inspect Key 7 (The Chariot / Cheth)
+adytum invariants "Sovereign Enclave" --json # Generate 22-key project invariant checklist
+adytum validate ./plan.md --json             # Run negation-aware 15-rule audit (exit 0 if >=70)
+adytum harden ./plan.md --json               # Auto-harden a draft spec to 100/100 (A+)
+adytum serve --port 8135                     # Run loopback HTTP daemon on 127.0.0.1:8135
+
+# Loopback HTTP API (:8135)
 curl -s http://127.0.0.1:8135/health
+curl -s http://127.0.0.1:8135/api/keys
+curl -s -X POST http://127.0.0.1:8135/api/validate \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Quick cloud-only prototype with no tests or boundaries."}'
 ```
 
 ---
@@ -40,32 +52,21 @@ curl -s http://127.0.0.1:8135/health
 ## Quick Start & Verification
 
 ```bash
-git clone https://github.com/NullAITech/adytum-alchemist-ai-workflow.git
+git clone https://github.com/1nc0gn30/adytum-alchemist-ai-workflow.git
 cd adytum-alchemist-ai-workflow
 npm install
-npm run dev      # Local Vite development server
 npm run lint     # TypeScript strict check (tsc --noEmit)
-npm test         # Node test runner: 22 Arcana assets, hygiene, and server.py checks
+npm test         # Node test runner: assets, secret export redaction, hygiene, HTTP API
+pytest -v        # Python server.py test suite: CORS, OPTIONS, traversal, /api/keys, /api/validate
 npm run build    # Production Vite bundle -> dist/
-gitleaks detect --source . --no-banner --redact
 ```
-
----
-
-## Repository Layout
-
-- `src/App.tsx` — 22-key initiation progression, correspondence matrix, reflection gate, meditation timer, and provider client
-- `public/tarot/` — 22 Major Arcana card illustrations, `Hebrewt.TTF`, and canonical reference text (`info.txt`)
-- `server.py` — Loopback HTTP server (`127.0.0.1:8135`) with `/health` probe and SPA fallback
-- `electron/main.cjs` — Desktop Electron shell entry point
-- `tests/test_adytum.mjs` — Deterministic asset, hygiene, and HTTP server test suite
 
 ---
 
 ## 100% Open-Access & Community Support
 
-- **Open Access**: 100% free and unlocked by default with zero paywalls, subscriptions, or locked curriculum keys.
+- **Open Access**: 100% free and unlocked by default with zero paywalls, blur locks, or subscriptions.
 - **☕ Buy Us a Coffee (Stripe)**: [https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X](https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X)
 - **Solana Tip Address**: `GG2eQbVh8ut1BK6j1A2tz7pSySdLpD38BgyEhGcxdXoK` (`solana:GG2eQbVh8ut1BK6j1A2tz7pSySdLpD38BgyEhGcxdXoK`)
 
-Engineered by **1nc0gn30** ([@1nc0gn30](https://github.com/1nc0gn30) · [1nc0gn30.si](https://1nc0gn30.si)) · [NullAI Platform](https://nullai.tech) · [Zoth Studio](https://zoth.nullai.tech)
+Engineered by **Neal Frazier Tech** ([@1nc0gn30](https://github.com/1nc0gn30)) • [NullAI Platform](https://nullai.tech) • [Zoth Studio](https://zoth.nullai.tech)

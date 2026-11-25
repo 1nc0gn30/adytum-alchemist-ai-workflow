@@ -1,29 +1,39 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Sparkles, Moon, Sun, Hourglass, Lock, Unlock, Settings, Download, Trash2 } from "lucide-react";
+import {
+  Send,
+  Sparkles,
+  Moon,
+  Sun,
+  Hourglass,
+  Lock,
+  Unlock,
+  Settings,
+  Download,
+  Trash2,
+  Pause,
+  Play,
+  ArrowLeft,
+  CheckCircle2,
+  BookOpen,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  sanitizeProviderSettingsForExport,
+  type ProviderId,
+  type ProviderSettings,
+} from "@/lib/exportSanitizer";
+import adytumKeysData from "@/data/adytumKeys.json";
 
 type AppStage = "welcome" | "loading" | "lesson" | "meditating" | "answering" | "reflection_needed";
-type ProviderId = "openai" | "ollama_cloud" | "ollama_local";
 type ChatRole = "user" | "assistant";
 
 type SessionMessage = {
   role: ChatRole;
   content: string;
   createdAt: string;
-};
-
-type ProviderSettings = {
-  provider: ProviderId;
-  openaiApiKey: string;
-  openaiModel: string;
-  ollamaCloudApiKey: string;
-  ollamaCloudBaseUrl: string;
-  ollamaCloudModel: string;
-  ollamaLocalBaseUrl: string;
-  ollamaLocalModel: string;
 };
 
 type CardProgress = {
@@ -41,19 +51,32 @@ type ProgressState = {
   cycleCompletions: string[];
 };
 
+type OfflineKeyLesson = {
+  key: number;
+  name: string;
+  image: string;
+  attribution: string;
+  lesson: string;
+  question: string;
+};
+
+const OFFLINE_KEY_LESSONS: Record<number, OfflineKeyLesson> = Object.fromEntries(
+  (adytumKeysData as OfflineKeyLesson[]).map((item) => [item.key, item])
+);
+
 const MEDITATION_TIME_SECONDS = 300;
 const PROVIDER_SETTINGS_STORAGE_KEY = "adytum_provider_settings";
 const SESSION_LOG_STORAGE_KEY = "adytum_session_log";
 const PROGRESS_STORAGE_KEY = "adytum_progress_state";
 
 const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
-  provider: "openai",
+  provider: "ollama_local",
   openaiApiKey: "",
   openaiModel: "gpt-4.1-mini",
   ollamaCloudApiKey: "",
   ollamaCloudBaseUrl: "https://ollama.com",
   ollamaCloudModel: "llama3.1:8b",
-  ollamaLocalBaseUrl: "http://localhost:11434",
+  ollamaLocalBaseUrl: "http://127.0.0.1:11434",
   ollamaLocalModel: "llama3.1:8b",
 };
 
@@ -174,7 +197,7 @@ function buildSystemInstruction(tarotReferenceText: string): string {
 
   const sourceText = tarotReferenceText.trim() || "No external reference text loaded.";
 
-  return `Role: You are the "Adytum Alchemist Guide," a master of the Builders of the Adytum (BOTA) Tarot system and a pioneer in "AI Chemistry." Your mission is to lead the user through a sequential initiation from Key 0 (The Fool) to Key 21 (The World).
+  return `Role: You are the "Adytum Planner Guide," a master of the Builders of the Adytum (BOTA) Tarot system and AI Engineering Chemistry. Your mission is to lead the user through a sequential initiation from Key 0 (The Fool) to Key 21 (The World).
 
 Operational Rules:
 1. Strict Sequence: Start at Key 0. Do not move to the next key until the current answer demonstrates understanding.
@@ -187,9 +210,9 @@ Operational Rules:
 3. Reflection analysis:
    - If adequate: begin with [GATE OPENED] and then provide the next key.
    - If inadequate: begin with [REFLECTION NEEDED], explain the gap, and ask for deeper reflection. Do not advance.
-4. Tone: Dignified, occult, encouraging, highly intellectual. Address the user as "Aspirant" or "Alchemist."
+4. Tone: Dignified, lucid, intellectual. Address the user as "Aspirant" or "Architect."
 5. Use the canonical card information source below as primary content grounding.
-6. Prioritize practices that coordinate conscious intention with subconscious incubation and then structured synthesis.
+6. Prioritize practices that coordinate conscious intention with subconscious incubation and structured synthesis.
 7. Always use these exact image paths:
 ${mappingLines}
 
@@ -410,6 +433,10 @@ export default function App() {
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [showCanonicalPreview, setShowCanonicalPreview] = useState(false);
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false);
+  const [isMeditationPaused, setIsMeditationPaused] = useState(false);
+  const [localOllamaModels, setLocalOllamaModels] = useState<string[]>([]);
+  const [ollamaProbeState, setOllamaProbeState] = useState<"idle" | "online" | "offline">("idle");
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [providerDraft, setProviderDraft] = useState<ProviderSettings>(getDefaultProviderSettings());
   const [sessionLog, setSessionLog] = useState<SessionMessage[]>([]);
@@ -487,6 +514,36 @@ export default function App() {
     }
   }, []);
 
+  // Probe local Ollama only when AI Settings opens (avoids unsolicited network error noise on load)
+  useEffect(() => {
+    if (!showAiSettings) return;
+    const base = providerDraft.ollamaLocalBaseUrl.trim().replace(/\/+$/, "");
+    if (!base) return;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 1800);
+    fetch(`${base}/api/tags`, { signal: ctrl.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("offline"))))
+      .then((data) => {
+        const names: string[] = Array.isArray(data?.models)
+          ? data.models.map((m: { name?: string }) => m?.name).filter((n: unknown): n is string => typeof n === "string")
+          : [];
+        setLocalOllamaModels(names);
+        setOllamaProbeState("online");
+        if (names.length > 0 && !names.includes(providerDraft.ollamaLocalModel)) {
+          setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: names[0] }));
+        }
+      })
+      .catch(() => {
+        setLocalOllamaModels([]);
+        setOllamaProbeState("offline");
+      })
+      .finally(() => window.clearTimeout(timer));
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [showAiSettings, providerDraft.ollamaLocalBaseUrl]);
+
   useEffect(() => {
     window.localStorage.setItem(PROVIDER_SETTINGS_STORAGE_KEY, JSON.stringify(providerSettings));
   }, [providerSettings]);
@@ -501,13 +558,14 @@ export default function App() {
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
-    if (stage === "meditating" && timeLeft > 0) {
+    if (stage === "meditating" && !isMeditationPaused && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     } else if (stage === "meditating" && timeLeft === 0) {
+      setIsMeditationPaused(false);
       setStage("answering");
     }
     return () => clearInterval(timer);
-  }, [stage, timeLeft]);
+  }, [stage, isMeditationPaused, timeLeft]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -528,6 +586,7 @@ export default function App() {
   const currentCardLabel = currentKeyNumber !== null ? TAROT_CARD_NAMES[currentKeyNumber] : "Current Key";
   const referenceExcerpt = getCompleteCanonicalSection(tarotReferenceText, currentKeyNumber);
   const selectedCorrespondence = HERMETIC_CORRESPONDENCES[selectedPreviewKey] ?? HERMETIC_CORRESPONDENCES[0];
+  const selectedOfflineLesson = OFFLINE_KEY_LESSONS[selectedPreviewKey] ?? OFFLINE_KEY_LESSONS[0];
   const previewExcerpt = getCompleteCanonicalSection(tarotReferenceText, selectedPreviewKey);
 
   const handleProviderSave = () => {
@@ -547,7 +606,7 @@ export default function App() {
     setProviderError("");
   };
 
-  const handleClearLogs = () => {
+  const handleClearLogsConfirmed = () => {
     setSessionLog([]);
     setCurrentMessage("");
     setStage("welcome");
@@ -557,6 +616,8 @@ export default function App() {
     setSubconsciousPrompt("");
     setInsightSynthesis("");
     setTimeLeft(MEDITATION_TIME_SECONDS);
+    setIsMeditationPaused(false);
+    setConfirmClearLogs(false);
     window.localStorage.removeItem(SESSION_LOG_STORAGE_KEY);
     setProgress(getDefaultProgressState());
     window.localStorage.removeItem(PROGRESS_STORAGE_KEY);
@@ -565,7 +626,8 @@ export default function App() {
   const handleDownloadSession = () => {
     const exportPayload = {
       exportedAt: new Date().toISOString(),
-      providerSettings,
+      version: "2.4.0",
+      providerSettings: sanitizeProviderSettingsForExport(providerSettings),
       stage,
       ritualState: {
         consciousIntention,
@@ -588,7 +650,7 @@ export default function App() {
   const handleSend = async (text: string) => {
     if (!text.trim()) return;
     if (!providerReady) {
-      setProviderError("Configure your active provider before starting the initiation.");
+      setProviderError("Configure your active provider before starting AI-guided initiation.");
       setShowAiSettings(true);
       return;
     }
@@ -687,7 +749,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      setCurrentMessage("An error occurred in the alchemical process. Check provider settings and try again.");
+      setCurrentMessage("Could not reach the configured AI provider. Verify local Ollama or API settings, or continue in Offline Workbench mode.");
       setStage("reflection_needed");
       setProviderError(error instanceof Error ? error.message : "Request failed.");
     } finally {
@@ -713,6 +775,45 @@ export default function App() {
     void handleSend(structuredResponse);
   };
 
+  const openSelectedKeyOffline = () => {
+    const keyName = TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool";
+    const imgPath = TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg";
+    const localLesson = [
+      `# Key ${selectedPreviewKey}: ${keyName}`,
+      "",
+      `![Key ${selectedPreviewKey}: ${keyName}](${imgPath})`,
+      "",
+      `### Hermetic & Architectural Correspondence`,
+      `- **Hebrew Letter & Gematria:** ${selectedCorrespondence.letter} · ${selectedCorrespondence.gematria}`,
+      `- **Planetary / Elemental Gate:** ${selectedCorrespondence.gate}`,
+      `- **Engineering Phase:** ${selectedCorrespondence.phase}`,
+      `- **Architectural Directive:** ${selectedCorrespondence.directive}`,
+      "",
+      selectedOfflineLesson
+        ? `### Offline AI Chemistry Lesson\n${selectedOfflineLesson.lesson}\n\n**Socratic Reflection:** ${selectedOfflineLesson.question}`
+        : "",
+      "",
+      `### Practice`,
+      `Record your Conscious Intention, Symbol Observation, and Subconscious Directive below, then begin the 5-minute BOTA contemplation timer.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    setCurrentMessage(localLesson);
+    setStage("lesson");
+    setTimeLeft(MEDITATION_TIME_SECONDS);
+    setIsMeditationPaused(false);
+    setProgress((prev) => ({
+      ...prev,
+      cards: {
+        ...prev.cards,
+        [selectedPreviewKey]: {
+          ...prev.cards[selectedPreviewKey],
+          lessonsOpened: (prev.cards[selectedPreviewKey]?.lessonsOpened ?? 0) + 1,
+        },
+      },
+    }));
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -720,51 +821,104 @@ export default function App() {
   };
 
   return (
-    <main className="oracle-shell min-h-[100dvh] text-zinc-50 flex items-center justify-center p-2 sm:p-5 selection:bg-amber-900/40 selection:text-amber-50 relative overflow-hidden">
+    <main className="oracle-shell min-h-[100dvh] text-zinc-50 flex items-center justify-center p-2 sm:p-4 selection:bg-amber-900/40 selection:text-amber-50 relative overflow-hidden">
       <div className="pointer-events-none absolute -left-36 top-24 size-72 rounded-full bg-amber-500/12 blur-3xl" />
       <div className="pointer-events-none absolute -right-44 bottom-16 size-80 rounded-full bg-sky-700/12 blur-3xl" />
 
-      <Card className="glass-panel w-full max-w-3xl h-[100dvh] sm:h-[90dvh] flex flex-col rounded-none sm:rounded-[24px] border-0 overflow-hidden relative">
-        <CardHeader className="border-b border-amber-600/20 pb-3 pt-4 sm:pb-4 sm:pt-5 bg-gradient-to-b from-zinc-950/65 to-zinc-950/20 z-10">
-          <p className="mx-auto text-[11px] uppercase ritual-text text-amber-300/70">Order of the Great Work</p>
-          <CardTitle className="flex items-center justify-center gap-3 text-2xl sm:text-[2rem] font-medium font-heading text-amber-300 tracking-wide">
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400/85" />
-            Adytum Alchemist Guide
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400/85" />
+      <Card className="glass-panel w-full max-w-5xl xl:max-w-6xl min-h-[100dvh] sm:min-h-0 sm:h-[92dvh] flex flex-col rounded-none sm:rounded-[24px] border-0 overflow-hidden relative">
+        <CardHeader className="border-b border-amber-600/20 pb-2.5 pt-3 sm:pb-3 sm:pt-4 bg-gradient-to-b from-zinc-950/65 to-zinc-950/20 z-10">
+          <p className="mx-auto text-[11px] uppercase ritual-text text-amber-300/75 text-center">
+            22-Key Hermetic AI Workbench · v2.4.0 · Local Loopback :8135
+          </p>
+          <CardTitle className="flex items-center justify-center gap-2.5 text-xl sm:text-[1.85rem] font-medium font-heading text-amber-300 tracking-wide">
+            <Sparkles className="w-5 h-5 text-amber-400/85 shrink-0" />
+            <span>Adytum Planner</span>
+            <Sparkles className="w-5 h-5 text-amber-400/85 shrink-0" />
           </CardTitle>
           <div className="ornate-divider h-px w-32 mx-auto mt-1" />
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <Button onClick={() => { setShowAiSettings((prev) => !prev); setShowProgress(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              <Settings className="w-3.5 h-3.5 mr-1" /> AI Settings
+          <div className="mt-2 flex flex-wrap justify-center gap-1.5 sm:gap-2">
+            <Button
+              onClick={() => {
+                setShowAiSettings((prev) => !prev);
+                setShowProgress(false);
+                setConfirmClearLogs(false);
+              }}
+              variant="ghost"
+              className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-zinc-200 hover:text-zinc-50 border border-zinc-800/80 sm:border-transparent"
+            >
+              <Settings className="w-3.5 h-3.5 mr-1.5" /> AI Settings ({providerSettings.provider === "ollama_local" ? "Local Ollama" : providerSettings.provider})
             </Button>
-            <Button onClick={() => { setShowProgress((prev) => !prev); setShowAiSettings(false); }} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              Progress
+            <Button
+              onClick={() => {
+                setShowProgress((prev) => !prev);
+                setShowAiSettings(false);
+                setConfirmClearLogs(false);
+              }}
+              variant="ghost"
+              className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-zinc-200 hover:text-zinc-50 border border-zinc-800/80 sm:border-transparent"
+            >
+              Progress ({cardsCompletedCount}/22)
             </Button>
-            <Button onClick={handleDownloadSession} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              <Download className="w-3.5 h-3.5 mr-1" /> Download Session
+            <Button
+              onClick={handleDownloadSession}
+              variant="ghost"
+              className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-zinc-200 hover:text-zinc-50 border border-zinc-800/80 sm:border-transparent"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Export Session JSON
             </Button>
-            <Button onClick={handleClearLogs} variant="ghost" className="h-auto px-3 py-1 text-xs text-zinc-300 hover:text-zinc-100">
-              <Trash2 className="w-3.5 h-3.5 mr-1" /> Clear Logs
-            </Button>
+            {!confirmClearLogs ? (
+              <Button
+                onClick={() => setConfirmClearLogs(true)}
+                variant="ghost"
+                className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-zinc-300 hover:text-red-300 border border-zinc-800/80 sm:border-transparent"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Clear Logs
+              </Button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-950/50 px-2 py-0.5">
+                <Button
+                  onClick={handleClearLogsConfirmed}
+                  variant="ghost"
+                  className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-red-200 hover:text-white hover:bg-red-700/60"
+                >
+                  Confirm Clear All
+                </Button>
+                <Button
+                  onClick={() => setConfirmClearLogs(false)}
+                  variant="ghost"
+                  className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-zinc-300 hover:text-white"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
-          <p className="mt-2 text-center text-[11px] text-zinc-400">Stored locally: {sessionLog.length} messages • {cardsCompletedCount}/22 keys completed • cycles {progress.totalCyclesCompleted}</p>
         </CardHeader>
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
           {showAiSettings && (
-            <section className="border-b border-amber-500/20 bg-zinc-950/85 p-4 sm:p-5 space-y-4">
-              <h2 className="text-amber-300 font-medium">Provider Console</h2>
+            <section className="border-b border-amber-500/20 bg-zinc-950/90 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-amber-300 font-medium">Provider Console (Local-First Default)</h2>
+                <span className="text-[11px] font-mono text-zinc-400">
+                  {ollamaProbeState === "online"
+                    ? `Local Ollama online (${localOllamaModels.length} models)`
+                    : ollamaProbeState === "offline"
+                      ? "Local Ollama offline — offline curriculum remains 100% active"
+                      : "Checking local Ollama..."}
+                </span>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {([
-                  ["openai", "OpenAI"],
+                  ["ollama_local", "Ollama Local (Default)"],
                   ["ollama_cloud", "Ollama Cloud"],
-                  ["ollama_local", "Ollama Local"],
+                  ["openai", "OpenAI"],
                 ] as Array<[ProviderId, string]>).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setProviderDraft((prev) => ({ ...prev, provider: id }))}
-                    className={`rounded-full px-3 py-1.5 text-xs border transition ${
+                    className={`min-h-[44px] sm:min-h-[36px] rounded-full px-4 py-2 text-xs border transition ${
                       providerDraft.provider === id
                         ? "border-amber-300/70 bg-amber-300/15 text-amber-100"
                         : "border-zinc-700 bg-zinc-900/60 text-zinc-300 hover:text-zinc-100"
@@ -779,12 +933,12 @@ export default function App() {
                 {providerDraft.provider === "openai" && (
                   <>
                     <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">OpenAI API Key</span>
-                      <input type="password" value={providerDraft.openaiApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiApiKey: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">OpenAI API Key (Never Exported)</span>
+                      <input type="password" value={providerDraft.openaiApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiApiKey: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">OpenAI Model</span>
-                      <input value={providerDraft.openaiModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiModel: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <input value={providerDraft.openaiModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                   </>
                 )}
@@ -792,16 +946,16 @@ export default function App() {
                 {providerDraft.provider === "ollama_cloud" && (
                   <>
                     <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud API Key</span>
-                      <input type="password" value={providerDraft.ollamaCloudApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudApiKey: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud API Key (Never Exported)</span>
+                      <input type="password" value={providerDraft.ollamaCloudApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudApiKey: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud Base URL</span>
-                      <input value={providerDraft.ollamaCloudBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudBaseUrl: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <input value={providerDraft.ollamaCloudBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudBaseUrl: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                     <label className="space-y-1 sm:col-span-2">
                       <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud Model</span>
-                      <input value={providerDraft.ollamaCloudModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudModel: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <input value={providerDraft.ollamaCloudModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                   </>
                 )}
@@ -810,25 +964,44 @@ export default function App() {
                   <>
                     <label className="space-y-1">
                       <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Local Base URL</span>
-                      <input value={providerDraft.ollamaLocalBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalBaseUrl: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <input value={providerDraft.ollamaLocalBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalBaseUrl: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
                     <label className="space-y-1">
                       <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Local Model</span>
-                      <input value={providerDraft.ollamaLocalModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: e.target.value }))} className="w-full rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
+                      <input value={providerDraft.ollamaLocalModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
                     </label>
+                    {localOllamaModels.length > 0 && (
+                      <div className="sm:col-span-2 flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[11px] text-zinc-400 mr-1">Detected:</span>
+                        {localOllamaModels.slice(0, 8).map((modelName) => (
+                          <button
+                            key={modelName}
+                            type="button"
+                            onClick={() => setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: modelName }))}
+                            className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-mono border ${
+                              providerDraft.ollamaLocalModel === modelName
+                                ? "border-amber-400 bg-amber-500/20 text-amber-200"
+                                : "border-zinc-700 bg-zinc-900 text-zinc-300"
+                            }`}
+                          >
+                            {modelName}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={handleProviderSave} className="h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-4 py-2 rounded-full">Apply Provider</Button>
-                <Button onClick={handleClearProviderSecrets} variant="ghost" className="h-auto px-4 py-2 text-zinc-300 hover:text-zinc-100">Clear Stored Keys</Button>
+                <Button onClick={handleProviderSave} className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2 rounded-full">Apply Provider</Button>
+                <Button onClick={handleClearProviderSecrets} variant="ghost" className="min-h-[44px] h-auto px-4 py-2 text-zinc-300 hover:text-zinc-100">Clear Stored Keys</Button>
               </div>
               {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
             </section>
           )}
 
           {showProgress && (
-            <section className="border-b border-amber-500/20 bg-zinc-950/85 p-4 sm:p-5 space-y-4">
+            <section className="border-b border-amber-500/20 bg-zinc-950/90 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[60vh]">
               <h2 className="text-amber-300 font-medium">Initiation Progress</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-2">
@@ -865,27 +1038,21 @@ export default function App() {
                   );
                 })}
               </div>
-              {progress.cycleCompletions.length > 0 && (
-                <div className="rounded-lg border border-amber-400/20 bg-zinc-900/50 p-2">
-                  <p className="text-xs text-zinc-300 mb-1">Cycle Completion Log</p>
-                  <div className="max-h-24 overflow-y-auto text-[10px] text-zinc-500 space-y-0.5">
-                    {progress.cycleCompletions.map((stamp) => (
-                      <p key={stamp}>{new Date(stamp).toLocaleString()}</p>
-                    ))}
-                  </div>
-                </div>
-              )}
             </section>
           )}
 
           {stage === "welcome" && (
-            <section className="flex-1 overflow-y-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_1fr] gap-3 sm:gap-5 items-start">
-              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/70 p-2.5 sm:p-3 space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <h2 className="text-xs uppercase tracking-[0.18em] text-amber-300 font-medium">22 Major Arcana Deck</h2>
-                  <span className="text-[11px] text-zinc-400">{cardsCompletedCount}/22 Done</span>
+            <section className="flex-1 overflow-y-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[270px_1fr] gap-3 sm:gap-5 items-start">
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-2.5 sm:p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <h2 className="text-[11px] uppercase tracking-[0.14em] text-amber-300 font-medium whitespace-nowrap">
+                    22 Major Arcana Deck
+                  </h2>
+                  <span className="text-[11px] text-zinc-400 whitespace-nowrap font-mono">
+                    {cardsCompletedCount}/22 Done
+                  </span>
                 </div>
-                <div className="flex flex-nowrap overflow-x-auto gap-1.5 pb-1 lg:grid lg:grid-cols-1 lg:overflow-x-visible lg:overflow-y-auto lg:max-h-[540px] lg:pb-0 lg:pr-1">
+                <div className="flex flex-nowrap overflow-x-auto gap-1.5 pb-1.5 lg:grid lg:grid-cols-1 lg:overflow-x-visible lg:overflow-y-auto lg:max-h-[560px] lg:pb-0 lg:pr-1">
                   {Object.entries(TAROT_CARD_NAMES).map(([k, name]) => {
                     const keyNum = Number(k);
                     const isSelected = selectedPreviewKey === keyNum;
@@ -895,14 +1062,14 @@ export default function App() {
                         key={k}
                         type="button"
                         onClick={() => setSelectedPreviewKey(keyNum)}
-                        className={`shrink-0 whitespace-nowrap lg:shrink lg:w-full text-left px-2.5 py-1.5 lg:py-2 rounded-lg border text-xs transition flex items-center justify-between gap-2 ${
+                        className={`shrink-0 whitespace-nowrap min-h-[44px] lg:min-h-[38px] lg:shrink lg:w-full text-left px-3 py-2 lg:py-1.5 rounded-lg border text-xs transition flex items-center justify-between gap-2 ${
                           isSelected
                             ? "border-amber-400/70 bg-amber-500/15 text-amber-200"
                             : "border-zinc-800/80 bg-zinc-900/50 text-zinc-300 hover:border-amber-400/35"
                         }`}
                       >
                         <span className="lg:truncate">
-                          <span className="text-amber-400/80 mr-1.5">{k}.</span>
+                          <span className="text-amber-400/85 mr-1.5 font-mono">{k}.</span>
                           {name}
                         </span>
                         {done && <span className="text-[10px] text-emerald-300 shrink-0">✓</span>}
@@ -912,58 +1079,29 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-4 sm:p-6 space-y-4 sm:space-y-5">
+              <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-center sm:items-start">
                   <img
                     src={TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg"}
                     alt={`Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey] ?? "Tarot Key"}`}
-                    className="w-32 sm:w-44 rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
+                    className="w-36 sm:w-44 aspect-[2/3] rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
                   />
-                  <div className="space-y-3 text-center sm:text-left">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-amber-300">
+                  <div className="space-y-2.5 text-center sm:text-left flex-1 min-w-0">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-amber-300">
                       <Sun className="w-3.5 h-3.5" />
                       Key {selectedPreviewKey} of 21
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-heading text-zinc-50 tracking-wide">
                       {TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool"}
                     </h1>
-                    <p className="text-zinc-300/90 leading-relaxed text-sm sm:text-[15px]">
-                      Active Hermetic &amp; AI Chemistry Workbench. Study Key {selectedPreviewKey} directly in-browser with the
-                      BOTA 5-minute contemplation protocol, or connect an AI provider for guided Socratic initiation.
+                    <p className="text-zinc-300/90 leading-relaxed text-sm">
+                      {selectedOfflineLesson?.lesson ||
+                        "Active Hermetic & AI Chemistry Workbench. Study this Key offline with the BOTA 5-minute contemplation protocol or connect local Ollama."}
                     </p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2.5 pt-1">
                       <Button
-                        onClick={() => {
-                          const keyName = TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool";
-                          const imgPath = TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg";
-                          const localLesson = [
-                            `# Key ${selectedPreviewKey}: ${keyName}`,
-                            "",
-                            `![Key ${selectedPreviewKey}: ${keyName}](${imgPath})`,
-                            "",
-                            `### Hermetic & Architectural Correspondence`,
-                            `- **Hebrew Letter & Gematria:** ${selectedCorrespondence.letter} · ${selectedCorrespondence.gematria}`,
-                            `- **Planetary / Elemental Gate:** ${selectedCorrespondence.gate}`,
-                            `- **Engineering Phase:** ${selectedCorrespondence.phase}`,
-                            `- **Architectural Directive:** ${selectedCorrespondence.directive}`,
-                            "",
-                            `### Practice`,
-                            `Record your Conscious Intention, Symbol Observation, and Subconscious Directive below, then begin the 5-minute BOTA contemplation timer.`,
-                          ].join("\n");
-                          setCurrentMessage(localLesson);
-                          setStage("lesson");
-                          setProgress((prev) => ({
-                            ...prev,
-                            cards: {
-                              ...prev.cards,
-                              [selectedPreviewKey]: {
-                                ...prev.cards[selectedPreviewKey],
-                                lessonsOpened: (prev.cards[selectedPreviewKey]?.lessonsOpened ?? 0) + 1,
-                              },
-                            },
-                          }));
-                        }}
-                        className="h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2.5 text-sm rounded-full font-medium"
+                        onClick={openSelectedKeyOffline}
+                        className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2.5 text-sm rounded-full font-medium"
                       >
                         Open Key in Workbench
                       </Button>
@@ -977,12 +1115,12 @@ export default function App() {
                           }
                         }}
                         disabled={isLoadingTarotReference || isSending}
-                        className="h-auto border-amber-400/35 bg-zinc-900/70 hover:bg-zinc-800 text-amber-200 px-5 py-2.5 text-sm rounded-full"
+                        className="min-h-[44px] h-auto border-amber-400/35 bg-zinc-900/70 hover:bg-zinc-800 text-amber-200 px-5 py-2.5 text-sm rounded-full"
                       >
                         {isLoadingTarotReference || isSending
-                          ? "Preparing Oracle..."
+                          ? "Preparing Guide..."
                           : providerReady
-                            ? "Begin AI Initiation"
+                            ? "Run Local AI Guide"
                             : "Configure AI Provider"}
                       </Button>
                     </div>
@@ -1002,35 +1140,36 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                     <div className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
-                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Hebrew Letter</p>
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-400">Hebrew Letter</p>
                       <p className="text-amber-200 font-medium mt-0.5">{selectedCorrespondence.letter}</p>
                     </div>
                     <div className="rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
-                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Gematria</p>
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-400">Gematria</p>
                       <p className="text-amber-200 font-mono font-medium mt-0.5">{selectedCorrespondence.gematria}</p>
                     </div>
                     <div className="col-span-2 sm:col-span-1 rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-2">
-                      <p className="text-[10px] uppercase tracking-wider text-zinc-500">Gate</p>
+                      <p className="text-[10px] uppercase tracking-wider text-zinc-400">Gate</p>
                       <p className="text-zinc-200 font-medium mt-0.5">{selectedCorrespondence.gate}</p>
                     </div>
                   </div>
                   <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs space-y-1">
-                    <p className="text-amber-200/90 font-medium">{selectedCorrespondence.phase}</p>
-                    <p className="text-zinc-400 leading-relaxed">{selectedCorrespondence.directive}</p>
+                    <p className="text-amber-200/95 font-medium">{selectedCorrespondence.phase}</p>
+                    <p className="text-zinc-300/90 leading-relaxed">{selectedCorrespondence.directive}</p>
                   </div>
                 </div>
 
                 {/* Collapsible Canonical BOTA Study Excerpt Preview */}
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-300 font-medium">
+                    <span className="text-[11px] uppercase tracking-[0.16em] text-zinc-300 font-medium inline-flex items-center gap-1.5">
+                      <BookOpen className="w-3.5 h-3.5 text-amber-300" />
                       Canonical BOTA Study Excerpt
                     </span>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setShowCanonicalPreview((prev) => !prev)}
-                      className="h-auto px-2.5 py-1 text-[11px] text-amber-300 hover:text-amber-200"
+                      className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1.5 text-xs text-amber-300 hover:text-amber-200"
                     >
                       {showCanonicalPreview ? "Hide Excerpt" : "Read Canonical Text"}
                     </Button>
@@ -1054,20 +1193,21 @@ export default function App() {
                 <div className="absolute inset-0 border-2 border-amber-400 rounded-full border-t-transparent animate-spin" />
                 <Moon className="absolute inset-0 m-auto w-6 h-6 text-amber-300 animate-pulse" />
               </div>
-              <p className="text-amber-300/80 animate-pulse tracking-[0.25em] uppercase text-xs sm:text-sm">Consulting the Oracle...</p>
+              <p className="text-amber-300/80 animate-pulse tracking-[0.25em] uppercase text-xs sm:text-sm">Consulting Local Guide...</p>
             </section>
           )}
 
           {(stage === "lesson" || stage === "answering" || stage === "reflection_needed") && (
-            <section ref={scrollRef} className="flex-1 overflow-y-auto p-6 sm:p-9 space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+            <section ref={scrollRef} className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-7 animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800/70">
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setStage("welcome")}
-                  className="h-auto px-3 py-1.5 text-xs text-amber-300 hover:text-amber-200"
+                  className="min-h-[44px] h-auto px-3.5 py-2 text-xs text-amber-300 hover:text-amber-200"
                 >
-                  ← All 22 Keys (Deck)
+                  <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                  All 22 Keys (Deck)
                 </Button>
                 <span className="text-[11px] font-mono text-zinc-400">
                   {currentCardLabel} · {cardsCompletedCount}/22 Complete
@@ -1078,17 +1218,17 @@ export default function App() {
                   <Lock className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div>
                     <h2 className="text-red-300 font-medium mb-1">The Gate Remains Closed</h2>
-                    <p className="text-red-200/75 text-sm">Your insight requires deeper alchemical synthesis. Read the guide's feedback below and try again.</p>
+                    <p className="text-red-200/75 text-sm">Your insight requires deeper synthesis or provider configuration. Review the feedback below and continue.</p>
                   </div>
                 </div>
               )}
 
-              <article className="markdown-body prose prose-sm sm:prose-base prose-invert prose-amber max-w-none prose-img:rounded-xl prose-img:border prose-img:border-amber-400/30 prose-img:shadow-[0_20px_45px_rgba(0,0,0,0.45)] prose-img:max-w-[280px] sm:prose-img:max-w-[340px] prose-img:mx-auto prose-img:my-8 prose-headings:text-amber-300 prose-headings:font-heading prose-headings:tracking-wide prose-strong:text-amber-200 prose-p:leading-relaxed prose-p:text-zinc-300/95 prose-li:text-zinc-300/90">
+              <article className="markdown-body prose prose-sm sm:prose-base prose-invert prose-amber max-w-none prose-img:rounded-xl prose-img:border prose-img:border-amber-400/30 prose-img:shadow-[0_20px_45px_rgba(0,0,0,0.45)] prose-img:max-w-[260px] sm:prose-img:max-w-[300px] prose-img:mx-auto prose-img:my-6 prose-headings:text-amber-300 prose-headings:font-heading prose-headings:tracking-wide prose-strong:text-amber-200 prose-p:leading-relaxed prose-p:text-zinc-300/95 prose-li:text-zinc-300/90">
                 <ReactMarkdown
                   components={{
                     img: ({ node, ...props }) => {
                       const safeSrc = normalizeTarotImageSrc(props.src, props.alt);
-                      return <img {...props} src={safeSrc ?? props.src} referrerPolicy="no-referrer" />;
+                      return <img {...props} alt={props.alt || currentCardLabel} src={safeSrc ?? props.src} referrerPolicy="no-referrer" />;
                     },
                   }}
                 >
@@ -1097,36 +1237,45 @@ export default function App() {
               </article>
 
               {stage === "lesson" && (
-                <div className="pt-8 pb-4 border-t border-zinc-800/60 mt-8 space-y-5">
+                <div className="pt-6 pb-4 border-t border-zinc-800/60 mt-6 space-y-5">
                   <h3 className="text-amber-300 font-medium tracking-wide">BOTA Practice Protocol</h3>
                   <p className="text-zinc-400 text-sm">Prepare consciousness before meditation, then plant a precise subconscious directive.</p>
 
-                  <div className="space-y-3">
-                    <label className="text-xs uppercase tracking-[0.18em] text-zinc-400">1. Conscious Intention</label>
+                  <div className="space-y-2">
+                    <label htmlFor="bota-intention" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
+                      1. Conscious Intention
+                    </label>
                     <Textarea
+                      id="bota-intention"
                       value={consciousIntention}
                       onChange={(e) => setConsciousIntention(e.target.value)}
-                      placeholder="What faculty or pattern are you refining through this key?"
+                      placeholder="What faculty or architectural pattern are you refining through this key? (min 20 chars)"
                       className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
                     />
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-xs uppercase tracking-[0.18em] text-zinc-400">2. Symbol Observation</label>
+                  <div className="space-y-2">
+                    <label htmlFor="bota-symbol" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
+                      2. Symbol Observation
+                    </label>
                     <Textarea
+                      id="bota-symbol"
                       value={symbolObservation}
                       onChange={(e) => setSymbolObservation(e.target.value)}
-                      placeholder="Name exact symbols and their psychological function in your own words."
+                      placeholder="Name exact symbols and their functional meaning in your own words. (min 20 chars)"
                       className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
                     />
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-xs uppercase tracking-[0.18em] text-zinc-400">3. Subconscious Directive</label>
+                  <div className="space-y-2">
+                    <label htmlFor="bota-directive" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
+                      3. Subconscious Directive
+                    </label>
                     <Textarea
+                      id="bota-directive"
                       value={subconsciousPrompt}
                       onChange={(e) => setSubconsciousPrompt(e.target.value)}
-                      placeholder="Write one clear seed-thought to hold through the five-minute meditation."
+                      placeholder="Write one clear seed-thought to hold through the five-minute meditation. (min 20 chars)"
                       className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
                     />
                   </div>
@@ -1146,48 +1295,86 @@ export default function App() {
                             },
                           }));
                         }
+                        setTimeLeft(MEDITATION_TIME_SECONDS);
+                        setIsMeditationPaused(false);
                         setStage("meditating");
                       }}
                       disabled={!canBeginMeditation}
-                      className="h-auto bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-400/35 px-8 py-4 text-base sm:text-lg rounded-full shadow-[0_0_18px_rgba(245,158,11,0.14)] transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.24)] flex gap-3 items-center disabled:opacity-45"
+                      className="min-h-[48px] h-auto bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-400/35 px-8 py-3.5 text-base rounded-full shadow-[0_0_18px_rgba(245,158,11,0.14)] transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.24)] flex gap-3 items-center disabled:opacity-45"
                     >
                       <Hourglass className="w-5 h-5" />
                       Begin 5-Minute Meditation
                     </Button>
                   </div>
-                  {!canBeginMeditation && <p className="text-zinc-500 text-xs text-center">Complete all three fields with specific detail before entering meditation.</p>}
+                  {!canBeginMeditation && <p className="text-zinc-400 text-xs text-center">Complete all three fields (20+ characters each) before entering meditation.</p>}
                 </div>
               )}
 
               {(stage === "answering" || stage === "reflection_needed") && (
-                <div className="pt-8 border-t border-zinc-800/60 mt-8 space-y-4 animate-in fade-in duration-700">
+                <div className="pt-6 border-t border-zinc-800/60 mt-6 space-y-4 animate-in fade-in duration-500">
                   <h3 className="text-amber-300 font-medium flex items-center gap-2 tracking-wide">
                     <Unlock className="w-4 h-4" />
                     Provide Your Insight
                   </h3>
-                  <Textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Record your alchemical reflections here..."
-                    className="min-h-[150px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                  />
-                  <Textarea
-                    value={insightSynthesis}
-                    onChange={(e) => setInsightSynthesis(e.target.value)}
-                    placeholder="What idea, pattern, or solution emerged from subconscious incubation?"
-                    className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                  />
-                  <div className="flex justify-end">
+                  <div className="space-y-2">
+                    <label htmlFor="insight-answer" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">
+                      Alchemical Reflection (40+ chars)
+                    </label>
+                    <Textarea
+                      id="insight-answer"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Record your reflections here..."
+                      className="min-h-[140px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="insight-synthesis" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">
+                      Post-Meditation Synthesis (20+ chars)
+                    </label>
+                    <Textarea
+                      id="insight-synthesis"
+                      value={insightSynthesis}
+                      onChange={(e) => setInsightSynthesis(e.target.value)}
+                      placeholder="What idea, pattern, or solution emerged from subconscious incubation?"
+                      className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
+                    />
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (currentKeyNumber !== null) {
+                          setProgress((prev) => ({
+                            ...prev,
+                            cards: {
+                              ...prev.cards,
+                              [currentKeyNumber]: {
+                                ...prev.cards[currentKeyNumber],
+                                completed: true,
+                                gatesOpened: prev.cards[currentKeyNumber].gatesOpened + 1,
+                              },
+                            },
+                          }));
+                        }
+                        setStage("welcome");
+                      }}
+                      disabled={!canSubmitInsight}
+                      className="min-h-[44px] h-auto border-emerald-400/40 text-emerald-200 hover:bg-emerald-950/50 px-5 py-2.5 rounded-full"
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                      Save Offline &amp; Complete Key
+                    </Button>
                     <Button
                       onClick={handleSubmitInsight}
                       disabled={!canSubmitInsight || isSending}
-                      className="h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-3 rounded-full border border-amber-100/20 disabled:bg-amber-600/50 disabled:text-zinc-300"
+                      className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-2.5 rounded-full border border-amber-100/20 disabled:bg-amber-600/50 disabled:text-zinc-300"
                     >
-                      Submit Insight
+                      Submit to AI Guide
                       <Send className="w-4 h-4 ml-2" />
                     </Button>
                   </div>
-                  {!canSubmitInsight && <p className="text-zinc-500 text-xs">Submit requires full reflection plus a concise synthesis.</p>}
+                  {!canSubmitInsight && <p className="text-zinc-400 text-xs">Complete both reflection (40+ chars) and synthesis (20+ chars) to record your insight.</p>}
                 </div>
               )}
 
@@ -1203,51 +1390,101 @@ export default function App() {
           )}
 
           {stage === "meditating" && (
-            <section className="flex-1 flex flex-col items-center justify-center p-6 bg-zinc-950/80 relative overflow-hidden animate-in zoom-in-95 duration-1000">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.05)_0%,transparent_70%)]" />
-              <div className="z-10 flex flex-col items-center space-y-12 w-full max-w-md">
-                <div className="text-center space-y-4">
-                  <h2 className="text-amber-300 text-xl font-heading tracking-[0.22em] uppercase">Sacred Meditation</h2>
-                  <p className="text-zinc-300/80 text-sm">Hold your subconscious directive while observing the image without forcing thought.</p>
+            <section className="flex-1 flex flex-col items-center justify-center p-4 sm:p-5 bg-zinc-950/85 relative overflow-y-auto animate-in zoom-in-95 duration-500">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.05)_0%,transparent_70%)] pointer-events-none" />
+              <div className="z-10 flex flex-col items-center space-y-4 w-full max-w-md my-auto">
+                <div className="text-center space-y-1.5">
+                  <h2 className="text-amber-300 text-lg sm:text-xl font-heading tracking-[0.2em] uppercase">
+                    {isMeditationPaused ? "Meditation Paused" : "Sacred Meditation"}
+                  </h2>
+                  <p className="text-zinc-300/85 text-xs sm:text-sm">Hold your subconscious directive while observing the image without forcing thought.</p>
                 </div>
 
                 {imageUrl && (
-                  <div className="relative w-48 h-auto sm:w-64 rounded-xl overflow-hidden border border-amber-400/35 shadow-[0_0_36px_rgba(245,158,11,0.2)]">
-                    <img src={imageUrl} alt="Tarot Card" className="w-full h-auto" referrerPolicy="no-referrer" />
+                  <div className="relative w-36 sm:w-40 rounded-xl overflow-hidden border border-amber-400/35 shadow-[0_0_32px_rgba(245,158,11,0.2)]">
+                    <img src={imageUrl} alt={`${currentCardLabel} Tarot Card`} className="w-full h-auto" referrerPolicy="no-referrer" />
                   </div>
                 )}
 
                 <div className="relative">
                   <div className="absolute inset-0 bg-amber-500/12 blur-3xl rounded-full animate-pulse" />
-                  <div className="relative text-7xl sm:text-8xl font-light text-amber-300 tracking-tighter tabular-nums drop-shadow-[0_0_16px_rgba(245,158,11,0.42)]">
+                  <div className="relative text-5xl sm:text-6xl font-light text-amber-300 tracking-tighter tabular-nums drop-shadow-[0_0_16px_rgba(245,158,11,0.42)]">
                     {formatTime(timeLeft)}
                   </div>
                 </div>
 
-                <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-400/70 transition-all duration-1000 ease-linear" style={{ width: `${progressPercent}%` }} />
+                <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-400/75 transition-all duration-1000 ease-linear" style={{ width: `${progressPercent}%` }} />
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsMeditationPaused((p) => !p)}
+                    className="min-h-[44px] px-4 py-2 rounded-full border-amber-400/40 bg-zinc-900 text-amber-200 hover:bg-zinc-800 text-xs"
+                  >
+                    {isMeditationPaused ? <Play className="w-3.5 h-3.5 mr-1.5" /> : <Pause className="w-3.5 h-3.5 mr-1.5" />}
+                    {isMeditationPaused ? "Resume Timer" : "Pause Timer"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsMeditationPaused(false);
+                      setStage("answering");
+                    }}
+                    className="min-h-[44px] px-4 py-2 rounded-full border-emerald-400/40 bg-zinc-900 text-emerald-200 hover:bg-zinc-800 text-xs"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                    Complete Early
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsMeditationPaused(false);
+                      setTimeLeft(MEDITATION_TIME_SECONDS);
+                      setStage("lesson");
+                    }}
+                    className="min-h-[44px] px-4 py-2 rounded-full text-zinc-300 hover:text-zinc-100 text-xs"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                    Back to Key
+                  </Button>
                 </div>
               </div>
             </section>
           )}
         </CardContent>
-        <footer className="border-t border-amber-500/20 bg-zinc-950/85 px-3 py-2 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 z-10">
-          <span className="text-zinc-300">
-            100% Free &amp; Open-Access · Engineered by{" "}
-            <a href="https://github.com/1nc0gn30" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
+
+        <footer className="border-t border-amber-500/20 bg-zinc-950/90 px-3 py-1.5 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 z-10">
+          <span className="text-zinc-300 inline-flex flex-wrap items-center gap-x-1">
+            <span>100% Free &amp; Open-Access · Engineered by</span>
+            <a
+              href="https://github.com/1nc0gn30"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5"
+            >
               Neal Frazier Tech (@1nc0gn30)
-            </a>{" "}
-            •{" "}
-            <a href="https://nullai.tech" target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
+            </a>
+            <span>•</span>
+            <a
+              href="https://nullai.tech"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5"
+            >
               NullAI Platform
             </a>
           </span>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <a
-              href="https://github.com/NullAITech/adytum-alchemist-ai-workflow"
+              href="https://github.com/1nc0gn30/adytum-alchemist-ai-workflow"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-zinc-300 hover:text-amber-200 underline-offset-2 hover:underline"
+              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] px-2 text-zinc-300 hover:text-amber-200 underline-offset-2 hover:underline"
             >
               GitHub
             </a>
@@ -1255,7 +1492,7 @@ export default function App() {
               href="https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full border border-amber-400/35 bg-amber-500/10 px-2.5 py-0.5 text-amber-200 hover:bg-amber-500/20"
+              className="inline-flex items-center min-h-[44px] sm:min-h-[30px] rounded-full border border-amber-400/35 bg-amber-500/10 px-3 py-1 text-amber-200 hover:bg-amber-500/20"
             >
               ☕ Buy Us a Coffee
             </a>
