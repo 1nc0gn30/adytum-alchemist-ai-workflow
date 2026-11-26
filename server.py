@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Adytum Planner — 22-Key Hermetic AI Workbench Daemon (:8135)
+Adytum Planner — 22-Key Hermetic AI Workbench & Multi-Provider Loopback Bridge (:8135)
 Engineered by Neal Frazier Tech (@1nc0gn30) • NullAI Platform
 """
 import argparse
@@ -8,8 +8,13 @@ import http.server
 import json
 import os
 import re
+import shutil
 import socketserver
+import subprocess
+import time
+import urllib.error
 import urllib.parse
+import urllib.request
 
 VERSION = "2.4.0"
 SERVICE_ID = "adytum-alchemist-ai-workflow"
@@ -22,7 +27,8 @@ DIST_DIR = (
     else os.path.join(ROOT_DIR, "public")
 )
 DIST_REAL = os.path.realpath(DIST_DIR)
-MAX_POST_BYTES = 262_144  # 256 KB
+MAX_POST_BYTES = 524_288  # 512 KB
+SAFE_MODEL_RE = re.compile(r"^[A-Za-z0-9._:/@-]{1,120}$")
 
 HERMETIC_KEYS = [
     {"key": 0, "arcana": "0 · The Fool (Aleph)", "name": "The Fool", "letter": "Aleph (א)", "gematria": 1, "gate": "Air / Pneuma", "phase": "Pure Potentiality & Unbounded Ideation", "directive": "Strip all inherited assumptions; define the irreducible sovereign objective."},
@@ -60,7 +66,6 @@ def _has_positive_term(text: str, terms: list[str]) -> bool:
         pattern = re.compile(rf"\b{re.escape(term)}\w*", re.IGNORECASE)
         for match in pattern.finditer(text):
             prefix = text[max(0, match.start() - 32) : match.start()]
-            # Split at clause/sentence breaks so earlier sentences do not negate later ones.
             clause_prefix = re.split(r"[.;\n!?]", prefix)[-1]
             if not _NEGATION_RE.search(clause_prefix):
                 return True
@@ -171,13 +176,536 @@ def auto_harden_spec(plan_text: str = "", project_name: str = "Sovereign Zero-Eg
     return text
 
 
+# ---------------------------------------------------------------------------
+# Multi-Provider AI Discovery, Probe & Dispatch (Local CLIs, Bridges & Cloud)
+# ---------------------------------------------------------------------------
+
+
+def _http_json(url: str, method: str = "GET", payload: dict | None = None, headers: dict | None = None, timeout: float = 2.0):
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    hdrs = {"Accept": "application/json", **(headers or {})}
+    if data is not None and "Content-Type" not in hdrs:
+        hdrs["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+        return resp.status, json.loads(raw) if raw.strip() else {}
+
+
+def _is_harness_or_loop_wrapper(path: str, markers: tuple[str, ...]) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(2048)
+        if head.startswith(b"\x7fELF"):
+            return False
+        text = head.decode("utf-8", errors="ignore")
+        return any(m in text for m in markers)
+    except OSError:
+        return True
+
+
+def _resolve_cli_binary(provider_id: str) -> tuple[str | None, str]:
+    home = os.path.expanduser("~")
+    if provider_id == "agy_cli":
+        candidates = [
+            os.path.join(home, ".gemini", "antigravity-cli", "bin", "agy"),
+            shutil.which("agy") or "",
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c) and os.access(c, os.X_OK):
+                return c, "Antigravity CLI ready"
+        return None, "agy binary not found"
+
+    if provider_id == "hermes_cli":
+        candidates = [
+            os.path.join(home, ".local", "bin", "hermes"),
+            shutil.which("hermes") or "",
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c) and os.access(c, os.X_OK):
+                return c, "Hermes Agent CLI ready"
+        return None, "hermes binary not found"
+
+    if provider_id == "grok_cli":
+        candidates = [
+            os.path.join(home, ".grok", "bin", "grok"),
+            shutil.which("grok") or "",
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c) and os.access(c, os.X_OK):
+                return c, "Grok Build CLI ready"
+        return None, "grok binary not found"
+
+    if provider_id == "codex_cli":
+        candidates = [
+            os.path.join(home, ".npm-global", "bin", "codex"),
+            os.path.join(home, ".local", "lib", "node_modules", "@openai", "codex", "bin", "codex.js"),
+            "/usr/bin/codex",
+            os.path.join(home, ".local", "bin", "codex"),
+            "/usr/local/bin/codex",
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c) and os.access(c, os.X_OK):
+                if _is_harness_or_loop_wrapper(c, ("sovereign-agent-bridge gatekeep codex", "ZOTHOS OpenAI Codex Agent Sovereign Agent Workstation")):
+                    continue
+                return c, "OpenAI Codex CLI ready"
+        return None, "Install @openai/codex binary (gatekeeper wrapper detected without underlying binary)"
+
+    if provider_id == "claude_code":
+        candidates = [
+            os.path.join(home, ".claude", "local", "claude"),
+            os.path.join(home, ".npm-global", "bin", "claude"),
+            os.path.join(home, ".local", "lib", "node_modules", "@anthropic-ai", "claude-code", "cli.mjs"),
+            "/usr/local/bin/claude-code",
+            "/usr/bin/claude",
+            os.path.join(home, ".local", "bin", "claude"),
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c) and os.access(c, os.X_OK):
+                if _is_harness_or_loop_wrapper(c, ("Anthropic Claude Code is not installed yet", "ZOTHOS Anthropic Claude Code Sovereign Agent Workstation")):
+                    continue
+                return c, "Anthropic Claude Code CLI ready"
+        return None, "Claude Code harness present; run 'claude install' to install CLI"
+
+    return None, "Unknown CLI provider"
+
+
+def _validate_model_name(model: str) -> str:
+    cleaned = (model or "").strip()
+    if cleaned and not SAFE_MODEL_RE.match(cleaned):
+        raise ValueError("Invalid model identifier")
+    return cleaned
+
+
+def _format_cli_prompt(system_prompt: str, messages: list[dict]) -> str:
+    parts = []
+    if system_prompt.strip():
+        parts.append(f"System Instructions:\n{system_prompt.strip()}")
+    for msg in messages:
+        role = str(msg.get("role", "user")).upper()
+        content = str(msg.get("content", "")).strip()
+        if content:
+            parts.append(f"{role}: {content}")
+    return "\n\n".join(parts)
+
+
+def discover_providers() -> dict:
+    providers = []
+
+    # 1. AGY Bridge (:18000)
+    agy_models = []
+    agy_status = "offline"
+    agy_detail = "http://127.0.0.1:18000 unreachable"
+    try:
+        _, data = _http_json("http://127.0.0.1:18000/v1/models", timeout=1.2)
+        agy_models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+        agy_status = "online"
+        agy_detail = f"Live AGY OpenAI proxy ({len(agy_models)} models)"
+    except Exception:
+        pass
+    providers.append({
+        "id": "agy_bridge",
+        "name": "AGY Bridge (:18000)",
+        "group": "local",
+        "transport": "http",
+        "status": agy_status,
+        "requiresKey": False,
+        "baseUrl": "http://127.0.0.1:18000/v1",
+        "defaultModel": agy_models[0] if agy_models else "gemini-3.8-flash-high",
+        "models": agy_models,
+        "detail": agy_detail,
+    })
+
+    # 2. Ollama Local (:11434)
+    ol_models = []
+    ol_status = "offline"
+    ol_detail = "http://127.0.0.1:11434 unreachable"
+    try:
+        _, data = _http_json("http://127.0.0.1:11434/api/tags", timeout=1.2)
+        ol_models = [m.get("name") for m in data.get("models", []) if isinstance(m, dict) and m.get("name")]
+        ol_status = "online"
+        ol_detail = f"Local Ollama daemon ({len(ol_models)} models)"
+    except Exception:
+        pass
+    providers.append({
+        "id": "ollama_local",
+        "name": "Ollama Local (:11434)",
+        "group": "local",
+        "transport": "http",
+        "status": ol_status,
+        "requiresKey": False,
+        "baseUrl": "http://127.0.0.1:11434",
+        "defaultModel": ol_models[0] if ol_models else "hermes3:8b",
+        "models": ol_models,
+        "detail": ol_detail,
+    })
+
+    # 3. AZOTH Local Archon Agent (:8136)
+    az_status = "offline"
+    az_detail = "http://127.0.0.1:8136 unreachable"
+    try:
+        _, data = _http_json("http://127.0.0.1:8136/health", timeout=1.2)
+        if data.get("status") in ("healthy", "online"):
+            az_status = "online"
+            az_detail = "AZOTH Local Archon Agent online (/api/chat)"
+    except Exception:
+        pass
+    providers.append({
+        "id": "azoth_local",
+        "name": "AZOTH Local (:8136)",
+        "group": "local",
+        "transport": "http",
+        "status": az_status,
+        "requiresKey": False,
+        "baseUrl": "http://127.0.0.1:8136",
+        "defaultModel": "azoth-archon",
+        "models": ["azoth-archon"],
+        "detail": az_detail,
+    })
+
+    # 4-8. Local CLI Agents
+    cli_specs = [
+        ("agy_cli", "AGY CLI", "gemini-3.8-flash-high", agy_models or ["gemini-3.8-flash-high", "gemini-4-argon-medium", "claude-sonnet-5-5-high"]),
+        ("hermes_cli", "Hermes Agent CLI", "default", ["default"]),
+        ("grok_cli", "Grok CLI", "grok-3-mini", ["grok-3-mini", "grok-3"]),
+        ("codex_cli", "Codex CLI", "o4-mini", ["o4-mini", "gpt-4.1"]),
+        ("claude_code", "Claude Code CLI", "sonnet", ["sonnet", "opus"]),
+    ]
+    for pid, name, default_model, models in cli_specs:
+        bin_path, detail = _resolve_cli_binary(pid)
+        providers.append({
+            "id": pid,
+            "name": name,
+            "group": "local",
+            "transport": "cli",
+            "status": "cli_ready" if bin_path else "offline",
+            "requiresKey": False,
+            "path": bin_path,
+            "defaultModel": default_model,
+            "models": models,
+            "detail": detail,
+        })
+
+    # 9-15. Cloud & Custom APIs
+    cloud_specs = [
+        ("openai", "OpenAI API", "https://api.openai.com/v1", "gpt-4.1-mini", ["gpt-4.1-mini", "gpt-4.1", "o4-mini"]),
+        ("anthropic", "Anthropic Claude API", "https://api.anthropic.com/v1", "claude-sonnet-4-20250514", ["claude-sonnet-4-20250514", "claude-3-5-haiku-latest"]),
+        ("gemini_api", "Google Gemini API", "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash", ["gemini-2.5-flash", "gemini-2.5-pro"]),
+        ("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "openai/gpt-4o-mini", ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"]),
+        ("xai_grok", "xAI Grok API", "https://api.x.ai/v1", "grok-3-mini", ["grok-3-mini", "grok-3"]),
+        ("ollama_cloud", "Ollama Cloud", "https://ollama.com", "llama3.1:8b", ["llama3.1:8b", "qwen2.5:14b"]),
+        ("custom_openai", "Custom OpenAI-Compatible", "http://127.0.0.1:1234/v1", "local-model", ["local-model"]),
+    ]
+    for pid, name, base_url, default_model, models in cloud_specs:
+        providers.append({
+            "id": pid,
+            "name": name,
+            "group": "cloud",
+            "transport": "http",
+            "status": "configured_via_key",
+            "requiresKey": pid != "custom_openai",
+            "baseUrl": base_url,
+            "defaultModel": default_model,
+            "models": models,
+            "detail": f"Server-proxied HTTP ({base_url})",
+        })
+
+    recommended = "agy_bridge" if agy_status == "online" else ("ollama_local" if ol_status == "online" else "agy_cli")
+    return {"version": VERSION, "recommended": recommended, "providers": providers}
+
+
+def test_provider_connection(body: dict) -> dict:
+    provider = str(body.get("provider", "")).strip()
+    base_url = str(body.get("baseUrl", "")).strip().rstrip("/")
+    api_key = str(body.get("apiKey", "")).strip()
+    t0 = time.perf_counter()
+
+    def _ms() -> int:
+        return round((time.perf_counter() - t0) * 1000)
+
+    try:
+        if provider == "agy_bridge":
+            url = (base_url or "http://127.0.0.1:18000/v1") + "/models"
+            _, data = _http_json(url, timeout=4.0)
+            models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"AGY Bridge online with {len(models)} models"}
+
+        if provider == "ollama_local":
+            url = (base_url or "http://127.0.0.1:11434") + "/api/tags"
+            _, data = _http_json(url, timeout=4.0)
+            models = [m.get("name") for m in data.get("models", []) if isinstance(m, dict) and m.get("name")]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"Ollama Local online with {len(models)} models"}
+
+        if provider == "azoth_local":
+            url = (base_url or "http://127.0.0.1:8136") + "/health"
+            _, data = _http_json(url, timeout=4.0)
+            ok = data.get("status") in ("healthy", "online")
+            return {"ok": ok, "provider": provider, "status": "online" if ok else "offline", "latencyMs": _ms(), "detail": f"AZOTH Local health: {data.get('status', 'unknown')}"}
+
+        if provider in ("agy_cli", "hermes_cli", "grok_cli", "codex_cli", "claude_code"):
+            bin_path, detail = _resolve_cli_binary(provider)
+            if not bin_path:
+                return {"ok": False, "provider": provider, "status": "offline", "latencyMs": _ms(), "detail": detail}
+            res = subprocess.run(
+                [bin_path, "--version"],
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            ver = (res.stdout or res.stderr or "").strip().splitlines()[0] if (res.stdout or res.stderr) else "ready"
+            return {"ok": res.returncode == 0, "provider": provider, "status": "cli_ready" if res.returncode == 0 else "error", "latencyMs": _ms(), "detail": ver[:160]}
+
+        if provider in ("openai", "openrouter", "xai_grok", "custom_openai"):
+            defaults = {
+                "openai": "https://api.openai.com/v1",
+                "openrouter": "https://openrouter.ai/api/v1",
+                "xai_grok": "https://api.x.ai/v1",
+                "custom_openai": "http://127.0.0.1:1234/v1",
+            }
+            if provider != "custom_openai" and not api_key:
+                return {"ok": False, "provider": provider, "status": "missing_key", "latencyMs": _ms(), "detail": "API key required"}
+            hdrs = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            _, data = _http_json((base_url or defaults[provider]) + "/models", headers=hdrs, timeout=6.0)
+            models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")][:25]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"Authenticated ({len(models)} models returned)"}
+
+        if provider == "anthropic":
+            if not api_key:
+                return {"ok": False, "provider": provider, "status": "missing_key", "latencyMs": _ms(), "detail": "Anthropic API key required"}
+            hdrs = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+            _, data = _http_json((base_url or "https://api.anthropic.com/v1") + "/models", headers=hdrs, timeout=6.0)
+            models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")][:20]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"Anthropic API verified ({len(models)} models)"}
+
+        if provider == "gemini_api":
+            if not api_key:
+                return {"ok": False, "provider": provider, "status": "missing_key", "latencyMs": _ms(), "detail": "Google Gemini API key required"}
+            hdrs = {"x-goog-api-key": api_key}
+            _, data = _http_json((base_url or "https://generativelanguage.googleapis.com/v1beta") + "/models", headers=hdrs, timeout=6.0)
+            models = [m.get("name", "").replace("models/", "") for m in data.get("models", []) if isinstance(m, dict) and m.get("name")][:20]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"Gemini API verified ({len(models)} models)"}
+
+        if provider == "ollama_cloud":
+            if not api_key:
+                return {"ok": False, "provider": provider, "status": "missing_key", "latencyMs": _ms(), "detail": "Ollama Cloud API key required"}
+            hdrs = {"Authorization": f"Bearer {api_key}"}
+            _, data = _http_json((base_url or "https://ollama.com") + "/api/tags", headers=hdrs, timeout=6.0)
+            models = [m.get("name") for m in data.get("models", []) if isinstance(m, dict) and m.get("name")][:20]
+            return {"ok": True, "provider": provider, "status": "online", "latencyMs": _ms(), "models": models, "detail": f"Ollama Cloud verified ({len(models)} models)"}
+
+        return {"ok": False, "provider": provider, "status": "unknown", "latencyMs": _ms(), "detail": f"Unknown provider: {provider}"}
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "provider": provider, "status": "http_error", "latencyMs": _ms(), "detail": f"Upstream HTTP {exc.code}"}
+    except Exception as exc:
+        return {"ok": False, "provider": provider, "status": "offline", "latencyMs": _ms(), "detail": str(exc)[:180]}
+
+
+def dispatch_chat(body: dict) -> tuple[int, dict]:
+    provider = str(body.get("provider", "")).strip()
+    try:
+        model = _validate_model_name(str(body.get("model", "")))
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    base_url = str(body.get("baseUrl", "")).strip().rstrip("/")
+    api_key = str(body.get("apiKey", "")).strip()
+    system_prompt = str(body.get("systemPrompt", "")).strip()
+    raw_messages = body.get("messages")
+    if not isinstance(raw_messages, list) or not raw_messages:
+        return 400, {"ok": False, "error": "messages must be a non-empty array"}
+
+    messages = [
+        {"role": str(m.get("role", "user")), "content": str(m.get("content", ""))}
+        for m in raw_messages
+        if isinstance(m, dict) and str(m.get("content", "")).strip()
+    ]
+    if not messages:
+        return 400, {"ok": False, "error": "messages contain no text content"}
+
+    t0 = time.perf_counter()
+
+    def _ms() -> int:
+        return round((time.perf_counter() - t0) * 1000)
+
+    try:
+        # OpenAI-compatible HTTP endpoints (AGY Bridge, OpenAI, OpenRouter, xAI Grok, Custom)
+        if provider in ("agy_bridge", "openai", "openrouter", "xai_grok", "custom_openai"):
+            defaults = {
+                "agy_bridge": ("http://127.0.0.1:18000/v1", "gemini-3.8-flash-high"),
+                "openai": ("https://api.openai.com/v1", "gpt-4.1-mini"),
+                "openrouter": ("https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
+                "xai_grok": ("https://api.x.ai/v1", "grok-3-mini"),
+                "custom_openai": ("http://127.0.0.1:1234/v1", "local-model"),
+            }
+            def_base, def_model = defaults[provider]
+            use_base = base_url or def_base
+            use_model = model or def_model
+            if provider in ("openai", "openrouter", "xai_grok") and not api_key:
+                return 400, {"ok": False, "error": f"API key required for {provider}"}
+            oai_msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages
+            hdrs = {}
+            if api_key:
+                hdrs["Authorization"] = f"Bearer {api_key}"
+            _, data = _http_json(
+                f"{use_base}/chat/completions",
+                method="POST",
+                payload={"model": use_model, "messages": oai_msgs, "temperature": 0.7},
+                headers=hdrs,
+                timeout=90.0,
+            )
+            reply = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+            if not reply:
+                return 502, {"ok": False, "error": f"{provider} returned an empty reply"}
+            return 200, {"ok": True, "provider": provider, "model": use_model, "reply": reply, "latencyMs": _ms()}
+
+        # Ollama Local & Cloud
+        if provider in ("ollama_local", "ollama_cloud"):
+            use_base = base_url or ("http://127.0.0.1:11434" if provider == "ollama_local" else "https://ollama.com")
+            use_model = model or "hermes3:8b"
+            if provider == "ollama_cloud" and not api_key:
+                return 400, {"ok": False, "error": "Ollama Cloud API key required"}
+            oai_msgs = ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages
+            hdrs = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            _, data = _http_json(
+                f"{use_base}/api/chat",
+                method="POST",
+                payload={"model": use_model, "messages": oai_msgs, "stream": False},
+                headers=hdrs,
+                timeout=90.0,
+            )
+            reply = (data.get("message") or {}).get("content", "").strip()
+            if not reply:
+                return 502, {"ok": False, "error": f"{provider} returned an empty reply"}
+            return 200, {"ok": True, "provider": provider, "model": use_model, "reply": reply, "latencyMs": _ms()}
+
+        # AZOTH Local Archon Agent (:8136)
+        if provider == "azoth_local":
+            use_base = base_url or "http://127.0.0.1:8136"
+            prompt_text = _format_cli_prompt(system_prompt, messages)
+            _, data = _http_json(
+                f"{use_base}/api/chat",
+                method="POST",
+                payload={"message": prompt_text},
+                timeout=90.0,
+            )
+            if not data.get("ok"):
+                return 502, {"ok": False, "error": str(data.get("error") or "AZOTH Local error")}
+            reply = str(data.get("reply", "")).strip()
+            return 200, {"ok": True, "provider": provider, "model": str(data.get("engine") or "azoth-archon"), "reply": reply, "latencyMs": _ms()}
+
+        # Anthropic Messages API (server-proxied to avoid browser CORS)
+        if provider == "anthropic":
+            if not api_key:
+                return 400, {"ok": False, "error": "Anthropic API key required"}
+            use_base = base_url or "https://api.anthropic.com/v1"
+            use_model = model or "claude-sonnet-4-20250514"
+            payload = {"model": use_model, "max_tokens": 1400, "messages": messages}
+            if system_prompt:
+                payload["system"] = system_prompt
+            _, data = _http_json(
+                f"{use_base}/messages",
+                method="POST",
+                payload=payload,
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                timeout=90.0,
+            )
+            blocks = data.get("content") or []
+            reply = "\n".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text").strip()
+            if not reply:
+                return 502, {"ok": False, "error": "Anthropic returned an empty reply"}
+            return 200, {"ok": True, "provider": provider, "model": use_model, "reply": reply, "latencyMs": _ms()}
+
+        # Google Gemini API (key passed in x-goog-api-key header, never in URL)
+        if provider == "gemini_api":
+            if not api_key:
+                return 400, {"ok": False, "error": "Google Gemini API key required"}
+            use_base = base_url or "https://generativelanguage.googleapis.com/v1beta"
+            use_model = model or "gemini-2.5-flash"
+            contents = [
+                {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+                for m in messages
+            ]
+            payload = {"contents": contents}
+            if system_prompt:
+                payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+            _, data = _http_json(
+                f"{use_base}/models/{use_model}:generateContent",
+                method="POST",
+                payload=payload,
+                headers={"x-goog-api-key": api_key},
+                timeout=90.0,
+            )
+            cands = data.get("candidates") or []
+            parts = (cands[0].get("content") or {}).get("parts") or [] if cands else []
+            reply = "\n".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+            if not reply:
+                return 502, {"ok": False, "error": "Gemini API returned an empty reply"}
+            return 200, {"ok": True, "provider": provider, "model": use_model, "reply": reply, "latencyMs": _ms()}
+
+        # Local CLI Subprocesses (shell=False, strict argv list, timeout=90s)
+        if provider in ("agy_cli", "hermes_cli", "grok_cli", "codex_cli", "claude_code"):
+            bin_path, detail = _resolve_cli_binary(provider)
+            if not bin_path:
+                return 503, {"ok": False, "error": detail}
+            full_prompt = _format_cli_prompt(system_prompt, messages)
+            if provider == "agy_cli":
+                argv = [bin_path]
+                if model and model != "default":
+                    argv += ["--model", model]
+                argv += ["-p", full_prompt, "--output-format", "text"]
+            elif provider == "hermes_cli":
+                argv = [bin_path, "chat", "-q", full_prompt, "--oneshot", "-Q"]
+                if model and model != "default":
+                    argv += ["-m", model]
+            elif provider == "grok_cli":
+                argv = [bin_path, "-p", full_prompt, "--output-format", "plain"]
+                if model and model != "default":
+                    argv += ["-m", model]
+                if system_prompt:
+                    argv += ["--system-prompt-override", system_prompt]
+            elif provider == "codex_cli":
+                argv = [bin_path, "exec", full_prompt]
+            else:
+                argv = [bin_path, "-p", full_prompt]
+
+            res = subprocess.run(
+                argv,
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=90,
+            )
+            reply = (res.stdout or "").strip()
+            if res.returncode != 0 or not reply:
+                err_msg = (res.stderr or res.stdout or f"CLI exited {res.returncode}").strip()[:240]
+                return 502, {"ok": False, "error": err_msg}
+            return 200, {"ok": True, "provider": provider, "model": model or "default", "reply": reply, "latencyMs": _ms()}
+
+        return 400, {"ok": False, "error": f"Unsupported provider: {provider}"}
+    except urllib.error.HTTPError as exc:
+        return 502, {"ok": False, "error": f"Upstream {provider} HTTP {exc.code}"}
+    except subprocess.TimeoutExpired:
+        return 504, {"ok": False, "error": f"{provider} timed out after 90s"}
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    except Exception as exc:
+        return 502, {"ok": False, "error": str(exc)[:220]}
+
+
+# ---------------------------------------------------------------------------
+# Hardened Loopback HTTP Handler
+# ---------------------------------------------------------------------------
+
+
 def _allowed_origin(origin: str) -> str:
     if not origin:
         return ""
     raw = origin.strip()
     try:
         parsed = urllib.parse.urlparse(raw)
-        port = parsed.port  # raises ValueError on malformed ports like :8135.evil.com
+        port = parsed.port
     except ValueError:
         return ""
     if parsed.scheme not in ("http", "https"):
@@ -279,6 +807,9 @@ class AdytumHandler(http.server.SimpleHTTPRequestHandler):
         if clean_path == "/api/keys":
             return self._send_json({"version": VERSION, "count": len(HERMETIC_KEYS), "keys": HERMETIC_KEYS})
 
+        if clean_path == "/api/providers":
+            return self._send_json(discover_providers())
+
         if clean_path.startswith("/api/keys/"):
             suffix = clean_path[len("/api/keys/") :].strip("/")
             if suffix.isdigit():
@@ -299,7 +830,11 @@ class AdytumHandler(http.server.SimpleHTTPRequestHandler):
         if _is_traversal_attempt(clean_path):
             return self._send_json({"error": "Invalid path"}, status=400)
 
-        if clean_path not in ("/api/validate", "/api/harden"):
+        allowed, ok = self._check_origin()
+        if not ok:
+            return self._send_json({"error": "Cross-origin requests restricted to loopback"}, status=403)
+
+        if clean_path not in ("/api/validate", "/api/harden", "/api/providers/test", "/api/chat"):
             return self._send_json({"error": "Endpoint not found"}, status=404)
 
         try:
@@ -310,6 +845,19 @@ class AdytumHandler(http.server.SimpleHTTPRequestHandler):
             return self._send_json({"error": "Payload size out of bounds"}, status=413)
 
         raw = self.rfile.read(length).decode("utf-8", errors="replace") if length else ""
+
+        if clean_path in ("/api/providers/test", "/api/chat"):
+            try:
+                body = json.loads(raw) if raw.strip() else {}
+                if not isinstance(body, dict):
+                    return self._send_json({"error": "JSON object required"}, status=400)
+            except json.JSONDecodeError:
+                return self._send_json({"error": "Malformed JSON payload"}, status=400)
+            if clean_path == "/api/providers/test":
+                return self._send_json(test_provider_connection(body))
+            status, payload = dispatch_chat(body)
+            return self._send_json(payload, status=status)
+
         project_name = "Sovereign Zero-Egress Enclave"
         plan_text = raw
         if raw.strip().startswith("{"):
@@ -329,14 +877,18 @@ class AdytumHandler(http.server.SimpleHTTPRequestHandler):
         return self._send_json({"hardened": hardened, "audit": validate_plan(hardened)})
 
 
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main():
     ap = argparse.ArgumentParser(description="Adytum Planner HTTP server")
     ap.add_argument("--port", type=int, default=int(os.environ.get("ADYTUM_PORT", "8135")))
     ap.add_argument("--host", default="127.0.0.1")
     args, _ = ap.parse_known_args()
     os.environ["ADYTUM_PORT"] = str(args.port)
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((args.host, args.port), AdytumHandler) as httpd:
+    with ThreadedTCPServer((args.host, args.port), AdytumHandler) as httpd:
         httpd.serve_forever()
 
 

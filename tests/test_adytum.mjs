@@ -72,26 +72,59 @@ test('exportSanitizer redacts all API secrets and App.tsx uses it on export', ()
       '-e',
       `import { sanitizeProviderSettingsForExport } from './src/lib/exportSanitizer.ts';
        const safe = sanitizeProviderSettingsForExport({
-         provider: 'openai',
+         provider: 'anthropic',
+         agyBridgeBaseUrl: 'http://127.0.0.1:18000/v1',
+         agyBridgeModel: 'gemini-3.8-flash-high',
+         ollamaLocalBaseUrl: 'http://127.0.0.1:11434',
+         ollamaLocalModel: 'hermes3:8b',
+         azothLocalBaseUrl: 'http://127.0.0.1:8136',
+         agyCliModel: 'gemini-3.8-flash-high',
+         hermesCliModel: 'default',
+         grokCliModel: 'grok-3-mini',
+         codexCliModel: 'o4-mini',
+         claudeCodeModel: 'sonnet',
          openaiApiKey: 'sk-LIVE-SECRET-OPENAI-9999',
          openaiModel: 'gpt-4.1-mini',
+         anthropicApiKey: 'sk-ant-LIVE-SECRET-ANTHROPIC-7777',
+         anthropicModel: 'claude-sonnet-4-20250514',
+         geminiApiKey: 'AIza-LIVE-SECRET-GEMINI-6666',
+         geminiModel: 'gemini-2.5-flash',
+         openrouterApiKey: 'sk-or-LIVE-SECRET-OPENROUTER-5555',
+         openrouterModel: 'openai/gpt-4o-mini',
+         xaiApiKey: 'xai-LIVE-SECRET-GROK-4444',
+         xaiModel: 'grok-3-mini',
          ollamaCloudApiKey: 'ol-LIVE-SECRET-CLOUD-8888',
          ollamaCloudBaseUrl: 'https://ollama.com',
          ollamaCloudModel: 'llama3.1:8b',
-         ollamaLocalBaseUrl: 'http://127.0.0.1:11434',
-         ollamaLocalModel: 'llama3.1:8b',
+         customBaseUrl: 'http://127.0.0.1:1234/v1',
+         customApiKey: 'cust-LIVE-SECRET-CUSTOM-3333',
+         customModel: 'local-model',
        });
        console.log(JSON.stringify(safe));`,
     ],
     { cwd: ROOT, encoding: 'utf8' }
   );
-  assert.ok(!out.includes('sk-LIVE-SECRET-OPENAI-9999'), 'OpenAI API key leaked in exported JSON');
-  assert.ok(!out.includes('ol-LIVE-SECRET-CLOUD-8888'), 'Ollama Cloud API key leaked in exported JSON');
-  assert.ok(!out.includes('openaiApiKey'), 'openaiApiKey property present in exported JSON');
-  assert.ok(!out.includes('ollamaCloudApiKey'), 'ollamaCloudApiKey property present in exported JSON');
+  for (const secret of [
+    'sk-LIVE-SECRET-OPENAI-9999',
+    'sk-ant-LIVE-SECRET-ANTHROPIC-7777',
+    'AIza-LIVE-SECRET-GEMINI-6666',
+    'sk-or-LIVE-SECRET-OPENROUTER-5555',
+    'xai-LIVE-SECRET-GROK-4444',
+    'ol-LIVE-SECRET-CLOUD-8888',
+    'cust-LIVE-SECRET-CUSTOM-3333',
+    'openaiApiKey',
+    'anthropicApiKey',
+    'geminiApiKey',
+    'openrouterApiKey',
+    'xaiApiKey',
+    'ollamaCloudApiKey',
+    'customApiKey',
+  ]) {
+    assert.ok(!out.includes(secret), `Secret or key property leaked in exported JSON: ${secret}`);
+  }
   const parsed = JSON.parse(out);
   assert.equal(parsed.credentialsRedacted, true);
-  assert.equal(parsed.provider, 'openai');
+  assert.equal(parsed.provider, 'anthropic');
 });
 
 test('adytum CLI exposes real subcommands and rejects unknown commands', () => {

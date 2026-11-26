@@ -16,10 +16,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   BookOpen,
+  PlugZap,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import AdytumArcanaCard from "@/components/AdytumArcanaCard";
 import {
   sanitizeProviderSettingsForExport,
   type ProviderId,
@@ -60,25 +63,85 @@ type OfflineKeyLesson = {
   question: string;
 };
 
+type DiscoveredProvider = {
+  id: ProviderId;
+  name: string;
+  group: "local" | "cloud";
+  transport: "http" | "cli";
+  status: "online" | "cli_ready" | "offline" | "configured_via_key";
+  requiresKey: boolean;
+  baseUrl?: string;
+  path?: string | null;
+  defaultModel: string;
+  models: string[];
+  detail: string;
+};
+
+type ProviderTestResult = {
+  ok: boolean;
+  provider: string;
+  status: string;
+  latencyMs: number;
+  detail: string;
+  models?: string[];
+};
+
 const OFFLINE_KEY_LESSONS: Record<number, OfflineKeyLesson> = Object.fromEntries(
   (adytumKeysData as OfflineKeyLesson[]).map((item) => [item.key, item])
 );
 
 const MEDITATION_TIME_SECONDS = 300;
-const PROVIDER_SETTINGS_STORAGE_KEY = "adytum_provider_settings";
+const PROVIDER_SETTINGS_STORAGE_KEY = "adytum_provider_settings_v2";
 const SESSION_LOG_STORAGE_KEY = "adytum_session_log";
 const PROGRESS_STORAGE_KEY = "adytum_progress_state";
 
 const DEFAULT_PROVIDER_SETTINGS: ProviderSettings = {
-  provider: "ollama_local",
+  provider: "agy_bridge",
+  agyBridgeBaseUrl: "http://127.0.0.1:18000/v1",
+  agyBridgeModel: "gemini-3.8-flash-high",
+  ollamaLocalBaseUrl: "http://127.0.0.1:11434",
+  ollamaLocalModel: "hermes3:8b",
+  azothLocalBaseUrl: "http://127.0.0.1:8136",
+  agyCliModel: "gemini-3.8-flash-high",
+  hermesCliModel: "default",
+  grokCliModel: "grok-3-mini",
+  codexCliModel: "o4-mini",
+  claudeCodeModel: "sonnet",
   openaiApiKey: "",
   openaiModel: "gpt-4.1-mini",
+  anthropicApiKey: "",
+  anthropicModel: "claude-sonnet-4-20250514",
+  geminiApiKey: "",
+  geminiModel: "gemini-2.5-flash",
+  openrouterApiKey: "",
+  openrouterModel: "openai/gpt-4o-mini",
+  xaiApiKey: "",
+  xaiModel: "grok-3-mini",
   ollamaCloudApiKey: "",
   ollamaCloudBaseUrl: "https://ollama.com",
   ollamaCloudModel: "llama3.1:8b",
-  ollamaLocalBaseUrl: "http://127.0.0.1:11434",
-  ollamaLocalModel: "llama3.1:8b",
+  customBaseUrl: "http://127.0.0.1:1234/v1",
+  customApiKey: "",
+  customModel: "local-model",
 };
+
+const FALLBACK_PROVIDERS: DiscoveredProvider[] = [
+  { id: "agy_bridge", name: "AGY Bridge (:18000)", group: "local", transport: "http", status: "offline", requiresKey: false, baseUrl: "http://127.0.0.1:18000/v1", defaultModel: "gemini-3.8-flash-high", models: ["gemini-3.8-flash-high", "gemini-4-argon-medium", "claude-sonnet-5-5-high"], detail: "Local OpenAI-compatible AGY proxy" },
+  { id: "ollama_local", name: "Ollama Local (:11434)", group: "local", transport: "http", status: "offline", requiresKey: false, baseUrl: "http://127.0.0.1:11434", defaultModel: "hermes3:8b", models: ["hermes3:8b"], detail: "Local Ollama daemon" },
+  { id: "azoth_local", name: "AZOTH Local (:8136)", group: "local", transport: "http", status: "offline", requiresKey: false, baseUrl: "http://127.0.0.1:8136", defaultModel: "azoth-archon", models: ["azoth-archon"], detail: "AZOTH Local Archon Agent" },
+  { id: "agy_cli", name: "AGY CLI", group: "local", transport: "cli", status: "offline", requiresKey: false, defaultModel: "gemini-3.8-flash-high", models: ["gemini-3.8-flash-high"], detail: "Antigravity CLI" },
+  { id: "hermes_cli", name: "Hermes Agent CLI", group: "local", transport: "cli", status: "offline", requiresKey: false, defaultModel: "default", models: ["default"], detail: "Hermes Agent CLI" },
+  { id: "grok_cli", name: "Grok CLI", group: "local", transport: "cli", status: "offline", requiresKey: false, defaultModel: "grok-3-mini", models: ["grok-3-mini"], detail: "Grok Build CLI" },
+  { id: "codex_cli", name: "Codex CLI", group: "local", transport: "cli", status: "offline", requiresKey: false, defaultModel: "o4-mini", models: ["o4-mini"], detail: "OpenAI Codex CLI" },
+  { id: "claude_code", name: "Claude Code CLI", group: "local", transport: "cli", status: "offline", requiresKey: false, defaultModel: "sonnet", models: ["sonnet"], detail: "Anthropic Claude Code CLI" },
+  { id: "openai", name: "OpenAI API", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4.1-mini", models: ["gpt-4.1-mini", "gpt-4.1", "o4-mini"], detail: "OpenAI Chat Completions" },
+  { id: "anthropic", name: "Anthropic Claude API", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://api.anthropic.com/v1", defaultModel: "claude-sonnet-4-20250514", models: ["claude-sonnet-4-20250514", "claude-3-5-haiku-latest"], detail: "Server-proxied Anthropic Messages API" },
+  { id: "gemini_api", name: "Google Gemini API", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://generativelanguage.googleapis.com/v1beta", defaultModel: "gemini-2.5-flash", models: ["gemini-2.5-flash", "gemini-2.5-pro"], detail: "Google Generative Language API" },
+  { id: "openrouter", name: "OpenRouter", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://openrouter.ai/api/v1", defaultModel: "openai/gpt-4o-mini", models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet"], detail: "OpenRouter unified API" },
+  { id: "xai_grok", name: "xAI Grok API", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://api.x.ai/v1", defaultModel: "grok-3-mini", models: ["grok-3-mini", "grok-3"], detail: "xAI Grok API" },
+  { id: "ollama_cloud", name: "Ollama Cloud", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: true, baseUrl: "https://ollama.com", defaultModel: "llama3.1:8b", models: ["llama3.1:8b"], detail: "Ollama Cloud" },
+  { id: "custom_openai", name: "Custom OpenAI-Compatible", group: "cloud", transport: "http", status: "configured_via_key", requiresKey: false, baseUrl: "http://127.0.0.1:1234/v1", defaultModel: "local-model", models: ["local-model"], detail: "LM Studio / vLLM / llama.cpp" },
+];
 
 const TAROT_IMAGE_PATHS: Record<number, string> = {
   0: "/tarot/fool.jpg",
@@ -164,60 +227,21 @@ const HERMETIC_CORRESPONDENCES: Record<number, HermeticCorrespondence> = {
 };
 
 const TAROT_NAME_TO_NUMBER: Record<string, number> = {
-  fool: 0,
-  magician: 1,
-  highpriestess: 2,
-  empress: 3,
-  emperor: 4,
-  hierophant: 5,
-  hierorphant: 5,
-  lovers: 6,
-  chariot: 7,
-  strength: 8,
-  hermit: 9,
-  wheeloffortune: 10,
-  fortune: 10,
-  justice: 11,
-  hangedman: 12,
-  death: 13,
-  temperance: 14,
-  devil: 15,
-  tower: 16,
-  star: 17,
-  moon: 18,
-  sun: 19,
-  judgement: 20,
-  world: 21,
+  fool: 0, magician: 1, highpriestess: 2, empress: 3, emperor: 4,
+  hierophant: 5, hierorphant: 5, lovers: 6, chariot: 7, strength: 8,
+  hermit: 9, wheeloffortune: 10, fortune: 10, justice: 11, hangedman: 12,
+  death: 13, temperance: 14, devil: 15, tower: 16, star: 17,
+  moon: 18, sun: 19, judgement: 20, world: 21,
 };
 
 function buildSystemInstruction(tarotReferenceText: string): string {
-  const mappingLines = Object.entries(TAROT_CARD_NAMES)
-    .map(([key, name]) => `Key ${key}: ${name}. Image: ![${name}](${TAROT_IMAGE_PATHS[Number(key)]})`)
-    .join("\n");
-
-  const sourceText = tarotReferenceText.trim() || "No external reference text loaded.";
-
-  return `Role: You are the "Adytum Planner Guide," a master of the Builders of the Adytum (BOTA) Tarot system and AI Engineering Chemistry. Your mission is to lead the user through a sequential initiation from Key 0 (The Fool) to Key 21 (The World).
-
+  const sourceText = tarotReferenceText.trim().slice(0, 6000) || "Canonical 22 Major Arcana BOTA reference.";
+  return `Role: You are the "Adytum Planner Guide," combining Builders of the Adytum (BOTA) Tarot study with AI Engineering Chemistry.
 Operational Rules:
-1. Strict Sequence: Start at Key 0. Do not move to the next key until the current answer demonstrates understanding.
-2. Required response format for every new key:
-   [GATE OPENED] (include only when advancing to a new key after a passed reflection; omit for Key 0)
-   **Image**: ![Card Name](/tarot/...)
-   **The Attribution**: Name, Number, Hebrew Letter, and specific Intelligence.
-   **The AI Chemistry Lesson**: Translate the key's esoteric meaning into a modern AI concept.
-   **The Alchemical Question**: Ask one deep reflective question the user must answer.
-3. Reflection analysis:
-   - If adequate: begin with [GATE OPENED] and then provide the next key.
-   - If inadequate: begin with [REFLECTION NEEDED], explain the gap, and ask for deeper reflection. Do not advance.
-4. Tone: Dignified, lucid, intellectual. Address the user as "Aspirant" or "Architect."
-5. Use the canonical card information source below as primary content grounding.
-6. Prioritize practices that coordinate conscious intention with subconscious incubation and structured synthesis.
-7. Always use these exact image paths:
-${mappingLines}
-
-Canonical card information source:
-${sourceText}`;
+1. Structure lessons clearly with **The Attribution**, **The AI Chemistry Lesson**, and **The Alchemical Question**.
+2. If reflecting on a user answer: start with [GATE OPENED] when adequate or [REFLECTION NEEDED] if shallow.
+3. Tone: Lucid, dignified, concise.
+Reference excerpt:\n${sourceText}`;
 }
 
 function escapeRegExp(value: string): string {
@@ -227,63 +251,33 @@ function escapeRegExp(value: string): string {
 function getCompleteCanonicalSection(tarotText: string, keyNumber: number | null): string {
   if (!tarotText.trim()) return "";
   if (keyNumber === null) return tarotText.trim();
-
   const cardName = TAROT_CARD_NAMES[keyNumber];
   if (!cardName) return tarotText.trim();
-
-  const currentPattern = new RegExp(
-    `Name\\s*\\n+\\s*${escapeRegExp(cardName)}\\s*\\n+\\s*Key Number\\s*\\n+\\s*${keyNumber}\\b`,
-    "i"
-  );
-
+  const currentPattern = new RegExp(`Name\\s*\\n+\\s*${escapeRegExp(cardName)}\\s*\\n+\\s*Key Number\\s*\\n+\\s*${keyNumber}\\b`, "i");
   const start = tarotText.search(currentPattern);
   if (start < 0) return tarotText.trim();
-
   let end = tarotText.length;
   for (let i = keyNumber + 1; i <= 21; i += 1) {
     const nextName = TAROT_CARD_NAMES[i];
     if (!nextName) continue;
-    const nextPattern = new RegExp(
-      `Name\\s*\\n+\\s*${escapeRegExp(nextName)}\\s*\\n+\\s*Key Number\\s*\\n+\\s*${i}\\b`,
-      "i"
-    );
-
-    const relativeIndex = tarotText.slice(start + 1).search(nextPattern);
-    if (relativeIndex >= 0) {
-      end = start + 1 + relativeIndex;
+    const nextPattern = new RegExp(`Name\\s*\\n+\\s*${escapeRegExp(nextName)}\\s*\\n+\\s*Key Number\\s*\\n+\\s*${i}\\b`, "i");
+    const rel = tarotText.slice(start + 1).search(nextPattern);
+    if (rel >= 0) {
+      end = start + 1 + rel;
       break;
     }
   }
-
   return tarotText.slice(start, end).trim();
 }
 
 function normalizeTarotImageSrc(src?: string, alt?: string): string | null {
   if (!src) return null;
-
   const cleanedSrc = src.trim().split("?")[0].split("#")[0].toLowerCase();
-  const numberMatch = cleanedSrc.match(/(?:^|\/)(\d{1,2})(?:[-_a-z]*)\.jpg$/);
-  if (numberMatch) {
-    const cardNum = Number(numberMatch[1]);
-    return TAROT_IMAGE_PATHS[cardNum] ?? null;
-  }
-
-  const slug = (cleanedSrc + " " + (alt ?? ""))
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
+  const numMatch = cleanedSrc.match(/(?:^|\/)(\d{1,2})(?:[-_a-z]*)\.jpg$/);
+  if (numMatch) return TAROT_IMAGE_PATHS[Number(numMatch[1])] ?? null;
+  const slug = (cleanedSrc + " " + (alt ?? "")).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const byName = Object.entries(TAROT_NAME_TO_NUMBER).find(([name]) => slug.includes(name));
-  if (byName) return TAROT_IMAGE_PATHS[byName[1]];
-
-  return src;
-}
-
-function extractTarotImageFromMessage(message: string): string | null {
-  const markdownImage = message.match(/!\[(.*?)\]\((.*?)\)/);
-  if (!markdownImage) return null;
-  return normalizeTarotImageSrc(markdownImage[2], markdownImage[1]);
+  return byName ? TAROT_IMAGE_PATHS[byName[1]] : src;
 }
 
 function detectTarotKeyNumber(message: string): number | null {
@@ -292,40 +286,15 @@ function detectTarotKeyNumber(message: string): number | null {
     const num = Number(keyMatch[1]);
     if (num >= 0 && num <= 21) return num;
   }
-
   const lowered = message.toLowerCase();
   for (const [name, num] of Object.entries(TAROT_NAME_TO_NUMBER)) {
     if (lowered.includes(name.toLowerCase())) return num;
   }
-
   return null;
 }
 
-function forceCanonicalTarotImage(message: string): string {
-  const keyNum = detectTarotKeyNumber(message);
-  if (keyNum === null) return message;
-
-  const cardName = TAROT_CARD_NAMES[keyNum] ?? `Key ${keyNum}`;
-  const imagePath = TAROT_IMAGE_PATHS[keyNum];
-  if (!imagePath) return message;
-
-  const withoutExistingImageLine = message.replace(/^\s*\*\*Image\*\*:\s*!\[.*?\]\(.*?\)\s*$/gim, "").trim();
-  return `**Image**: ![${cardName}](${imagePath})\n\n${withoutExistingImageLine}`;
-}
-
-function getDefaultProviderSettings(): ProviderSettings {
-  return { ...DEFAULT_PROVIDER_SETTINGS };
-}
-
 function createEmptyCardProgress(): CardProgress {
-  return {
-    lessonsOpened: 0,
-    reflectionsNeeded: 0,
-    meditationsStarted: 0,
-    insightSubmissions: 0,
-    gatesOpened: 0,
-    completed: false,
-  };
+  return { lessonsOpened: 0, reflectionsNeeded: 0, meditationsStarted: 0, insightSubmissions: 0, gatesOpened: 0, completed: false };
 }
 
 function getDefaultProgressState(): ProgressState {
@@ -334,91 +303,73 @@ function getDefaultProgressState(): ProgressState {
   return { cards, totalCyclesCompleted: 0, cycleCompletions: [] };
 }
 
+function getActiveModelAndAuth(settings: ProviderSettings): { model: string; baseUrl?: string; apiKey?: string; label: string } {
+  switch (settings.provider) {
+    case "agy_bridge":
+      return { model: settings.agyBridgeModel, baseUrl: settings.agyBridgeBaseUrl, label: "AGY Bridge" };
+    case "ollama_local":
+      return { model: settings.ollamaLocalModel, baseUrl: settings.ollamaLocalBaseUrl, label: "Ollama Local" };
+    case "azoth_local":
+      return { model: "azoth-archon", baseUrl: settings.azothLocalBaseUrl, label: "AZOTH Local" };
+    case "agy_cli":
+      return { model: settings.agyCliModel, label: "AGY CLI" };
+    case "hermes_cli":
+      return { model: settings.hermesCliModel, label: "Hermes CLI" };
+    case "grok_cli":
+      return { model: settings.grokCliModel, label: "Grok CLI" };
+    case "codex_cli":
+      return { model: settings.codexCliModel, label: "Codex CLI" };
+    case "claude_code":
+      return { model: settings.claudeCodeModel, label: "Claude Code" };
+    case "openai":
+      return { model: settings.openaiModel, apiKey: settings.openaiApiKey, label: "OpenAI" };
+    case "anthropic":
+      return { model: settings.anthropicModel, apiKey: settings.anthropicApiKey, label: "Anthropic" };
+    case "gemini_api":
+      return { model: settings.geminiModel, apiKey: settings.geminiApiKey, label: "Gemini API" };
+    case "openrouter":
+      return { model: settings.openrouterModel, apiKey: settings.openrouterApiKey, label: "OpenRouter" };
+    case "xai_grok":
+      return { model: settings.xaiModel, apiKey: settings.xaiApiKey, label: "xAI Grok" };
+    case "ollama_cloud":
+      return { model: settings.ollamaCloudModel, baseUrl: settings.ollamaCloudBaseUrl, apiKey: settings.ollamaCloudApiKey, label: "Ollama Cloud" };
+    case "custom_openai":
+      return { model: settings.customModel, baseUrl: settings.customBaseUrl, apiKey: settings.customApiKey, label: "Custom API" };
+  }
+}
+
 function isProviderConfigured(settings: ProviderSettings): boolean {
-  if (settings.provider === "openai") return settings.openaiApiKey.trim().length > 0;
-  if (settings.provider === "ollama_cloud") {
-    return settings.ollamaCloudApiKey.trim().length > 0 && settings.ollamaCloudBaseUrl.trim().length > 0;
+  const { apiKey, baseUrl } = getActiveModelAndAuth(settings);
+  if (["openai", "anthropic", "gemini_api", "openrouter", "xai_grok", "ollama_cloud"].includes(settings.provider)) {
+    return Boolean(apiKey && apiKey.trim().length > 0);
   }
-  if (settings.provider === "ollama_local") {
-    return settings.ollamaLocalBaseUrl.trim().length > 0;
-  }
-  return false;
+  if (settings.provider === "custom_openai") return Boolean(baseUrl && baseUrl.trim().length > 0);
+  return true;
 }
 
-function toOpenAIMessages(systemInstruction: string, history: SessionMessage[]) {
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: systemInstruction },
-  ];
-  for (const msg of history) {
-    messages.push({ role: msg.role, content: msg.content });
-  }
-  return messages;
-}
-
-async function sendToProvider(
+async function dispatchProviderChat(
   settings: ProviderSettings,
-  systemInstruction: string,
+  systemPrompt: string,
   history: SessionMessage[]
-): Promise<string> {
-  if (settings.provider === "openai") {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.openaiApiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: settings.openaiModel.trim(),
-        messages: toOpenAIMessages(systemInstruction, history),
-        temperature: 0.7,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`OpenAI request failed (${res.status})`);
-    const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error("OpenAI returned an empty response.");
-    return text;
-  }
-
-  if (settings.provider === "ollama_cloud") {
-    const base = settings.ollamaCloudBaseUrl.trim().replace(/\/+$/, "");
-    const res = await fetch(`${base}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.ollamaCloudApiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: settings.ollamaCloudModel.trim(),
-        messages: toOpenAIMessages(systemInstruction, history),
-        stream: false,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`Ollama cloud request failed (${res.status})`);
-    const data = await res.json();
-    const text = data?.message?.content?.trim();
-    if (!text) throw new Error("Ollama cloud returned an empty response.");
-    return text;
-  }
-
-  const base = settings.ollamaLocalBaseUrl.trim().replace(/\/+$/, "");
-  const res = await fetch(`${base}/api/chat`, {
+): Promise<{ reply: string; latencyMs?: number }> {
+  const { model, baseUrl, apiKey } = getActiveModelAndAuth(settings);
+  const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: settings.ollamaLocalModel.trim(),
-      messages: toOpenAIMessages(systemInstruction, history),
-      stream: false,
+      provider: settings.provider,
+      model,
+      baseUrl,
+      apiKey,
+      systemPrompt,
+      messages: history.map((m) => ({ role: m.role, content: m.content })),
     }),
   });
-
-  if (!res.ok) throw new Error(`Ollama local request failed (${res.status})`);
-  const data = await res.json();
-  const text = data?.message?.content?.trim();
-  if (!text) throw new Error("Ollama local returned an empty response.");
-  return text;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || `Provider ${settings.provider} returned HTTP ${res.status}`);
+  }
+  return { reply: String(data.reply || "").trim(), latencyMs: data.latencyMs };
 }
 
 export default function App() {
@@ -435,10 +386,12 @@ export default function App() {
   const [showCanonicalPreview, setShowCanonicalPreview] = useState(false);
   const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [isMeditationPaused, setIsMeditationPaused] = useState(false);
-  const [localOllamaModels, setLocalOllamaModels] = useState<string[]>([]);
-  const [ollamaProbeState, setOllamaProbeState] = useState<"idle" | "online" | "offline">("idle");
-  const [providerSettings, setProviderSettings] = useState<ProviderSettings>(getDefaultProviderSettings());
-  const [providerDraft, setProviderDraft] = useState<ProviderSettings>(getDefaultProviderSettings());
+  const [discoveredProviders, setDiscoveredProviders] = useState<DiscoveredProvider[]>(FALLBACK_PROVIDERS);
+  const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
+  const [isTestingProvider, setIsTestingProvider] = useState(false);
+  const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+  const [providerSettings, setProviderSettings] = useState<ProviderSettings>({ ...DEFAULT_PROVIDER_SETTINGS });
+  const [providerDraft, setProviderDraft] = useState<ProviderSettings>({ ...DEFAULT_PROVIDER_SETTINGS });
   const [sessionLog, setSessionLog] = useState<SessionMessage[]>([]);
   const [progress, setProgress] = useState<ProgressState>(getDefaultProgressState());
   const [consciousIntention, setConsciousIntention] = useState("");
@@ -448,46 +401,69 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(MEDITATION_TIME_SECONDS);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const refreshProviders = async (applyRecommendedIfUnset = false) => {
+    setIsRefreshingProviders(true);
+    try {
+      const res = await fetch("/api/providers", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.providers)) {
+        setDiscoveredProviders(data.providers);
+        const agy = data.providers.find((p: DiscoveredProvider) => p.id === "agy_bridge");
+        const ol = data.providers.find((p: DiscoveredProvider) => p.id === "ollama_local");
+        if (applyRecommendedIfUnset && !window.localStorage.getItem(PROVIDER_SETTINGS_STORAGE_KEY)) {
+          const rec: ProviderId = (data.recommended as ProviderId) || "agy_bridge";
+          const next: ProviderSettings = {
+            ...DEFAULT_PROVIDER_SETTINGS,
+            provider: rec,
+            agyBridgeModel: agy?.models?.[0] || DEFAULT_PROVIDER_SETTINGS.agyBridgeModel,
+            ollamaLocalModel: ol?.models?.[0] || DEFAULT_PROVIDER_SETTINGS.ollamaLocalModel,
+          };
+          setProviderSettings(next);
+          setProviderDraft(next);
+        }
+      }
+    } catch {
+      // Static deploy without loopback server.py — keep fallback catalog cleanly
+    } finally {
+      setIsRefreshingProviders(false);
+    }
+  };
+
   useEffect(() => {
     const loadTarotReference = async () => {
       try {
         setIsLoadingTarotReference(true);
         const response = await fetch("/tarot/info.txt", { cache: "no-store" });
         if (!response.ok) throw new Error(`Failed to load tarot info (${response.status})`);
-        const text = await response.text();
-        setTarotReferenceText(text);
-      } catch (error) {
-        console.error("Error loading tarot info:", error);
+        setTarotReferenceText(await response.text());
+      } catch {
         setTarotReferenceText("");
       } finally {
         setIsLoadingTarotReference(false);
       }
     };
-
     void loadTarotReference();
+    void refreshProviders(true);
   }, []);
 
   useEffect(() => {
     const storedSettingsRaw = window.localStorage.getItem(PROVIDER_SETTINGS_STORAGE_KEY);
     if (storedSettingsRaw) {
       try {
-        const parsed = JSON.parse(storedSettingsRaw) as ProviderSettings;
-        const merged = { ...DEFAULT_PROVIDER_SETTINGS, ...parsed };
+        const merged = { ...DEFAULT_PROVIDER_SETTINGS, ...(JSON.parse(storedSettingsRaw) as Partial<ProviderSettings>) };
         setProviderSettings(merged);
         setProviderDraft(merged);
       } catch {
-        const fallback = { ...DEFAULT_PROVIDER_SETTINGS };
-        setProviderSettings(fallback);
-        setProviderDraft(fallback);
+        // ignore corrupt storage
       }
     }
-
     const storedLogsRaw = window.localStorage.getItem(SESSION_LOG_STORAGE_KEY);
     if (storedLogsRaw) {
       try {
         const parsed = JSON.parse(storedLogsRaw) as SessionMessage[];
         setSessionLog(parsed);
-        const lastAssistant = [...parsed].reverse().find((msg) => msg.role === "assistant");
+        const lastAssistant = [...parsed].reverse().find((m) => m.role === "assistant");
         if (lastAssistant) {
           setCurrentMessage(lastAssistant.content);
           setStage("lesson");
@@ -496,15 +472,12 @@ export default function App() {
         setSessionLog([]);
       }
     }
-
     const storedProgressRaw = window.localStorage.getItem(PROGRESS_STORAGE_KEY);
     if (storedProgressRaw) {
       try {
         const parsed = JSON.parse(storedProgressRaw) as ProgressState;
         const merged = getDefaultProgressState();
-        for (let i = 0; i <= 21; i += 1) {
-          merged.cards[i] = { ...merged.cards[i], ...(parsed.cards?.[i] ?? {}) };
-        }
+        for (let i = 0; i <= 21; i += 1) merged.cards[i] = { ...merged.cards[i], ...(parsed.cards?.[i] ?? {}) };
         merged.totalCyclesCompleted = parsed.totalCyclesCompleted ?? 0;
         merged.cycleCompletions = Array.isArray(parsed.cycleCompletions) ? parsed.cycleCompletions : [];
         setProgress(merged);
@@ -513,36 +486,6 @@ export default function App() {
       }
     }
   }, []);
-
-  // Probe local Ollama only when AI Settings opens (avoids unsolicited network error noise on load)
-  useEffect(() => {
-    if (!showAiSettings) return;
-    const base = providerDraft.ollamaLocalBaseUrl.trim().replace(/\/+$/, "");
-    if (!base) return;
-    const ctrl = new AbortController();
-    const timer = window.setTimeout(() => ctrl.abort(), 1800);
-    fetch(`${base}/api/tags`, { signal: ctrl.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("offline"))))
-      .then((data) => {
-        const names: string[] = Array.isArray(data?.models)
-          ? data.models.map((m: { name?: string }) => m?.name).filter((n: unknown): n is string => typeof n === "string")
-          : [];
-        setLocalOllamaModels(names);
-        setOllamaProbeState("online");
-        if (names.length > 0 && !names.includes(providerDraft.ollamaLocalModel)) {
-          setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: names[0] }));
-        }
-      })
-      .catch(() => {
-        setLocalOllamaModels([]);
-        setOllamaProbeState("offline");
-      })
-      .finally(() => window.clearTimeout(timer));
-    return () => {
-      window.clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [showAiSettings, providerDraft.ollamaLocalBaseUrl]);
 
   useEffect(() => {
     window.localStorage.setItem(PROVIDER_SETTINGS_STORAGE_KEY, JSON.stringify(providerSettings));
@@ -573,15 +516,19 @@ export default function App() {
 
   const systemInstruction = buildSystemInstruction(tarotReferenceText);
   const providerReady = isProviderConfigured(providerSettings);
-  const cardsCompletedCount = Object.values(progress.cards).filter((card) => card.completed).length;
+  const activeMeta = getActiveModelAndAuth(providerSettings);
+  const draftMeta = getActiveModelAndAuth(providerDraft);
+  const draftDiscovered = discoveredProviders.find((p) => p.id === providerDraft.provider);
+  const localProviders = discoveredProviders.filter((p) => p.group === "local");
+  const cloudProviders = discoveredProviders.filter((p) => p.group === "cloud");
 
+  const cardsCompletedCount = Object.values(progress.cards).filter((card) => card.completed).length;
   const currentKeyNumber = detectTarotKeyNumber(currentMessage);
   const canBeginMeditation =
     consciousIntention.trim().length >= 20 &&
     symbolObservation.trim().length >= 20 &&
     subconsciousPrompt.trim().length >= 20;
   const canSubmitInsight = input.trim().length >= 40 && insightSynthesis.trim().length >= 20;
-  const imageUrl = extractTarotImageFromMessage(currentMessage);
   const progressPercent = (timeLeft / MEDITATION_TIME_SECONDS) * 100;
   const currentCardLabel = currentKeyNumber !== null ? TAROT_CARD_NAMES[currentKeyNumber] : "Current Key";
   const referenceExcerpt = getCompleteCanonicalSection(tarotReferenceText, currentKeyNumber);
@@ -595,15 +542,51 @@ export default function App() {
     setShowAiSettings(false);
   };
 
+  const handleTestProvider = async () => {
+    setIsTestingProvider(true);
+    setTestResult(null);
+    try {
+      const { baseUrl, apiKey } = getActiveModelAndAuth(providerDraft);
+      const res = await fetch("/api/providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: providerDraft.provider, baseUrl, apiKey }),
+      });
+      const data = (await res.json()) as ProviderTestResult;
+      setTestResult(data);
+      if (data.ok && Array.isArray(data.models) && data.models.length > 0) {
+        setDiscoveredProviders((prev) =>
+          prev.map((p) => (p.id === providerDraft.provider ? { ...p, status: "online", models: data.models! } : p))
+        );
+      }
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        provider: providerDraft.provider,
+        status: "offline",
+        latencyMs: 0,
+        detail: err instanceof Error ? err.message : "Probe failed",
+      });
+    } finally {
+      setIsTestingProvider(false);
+    }
+  };
+
   const handleClearProviderSecrets = () => {
-    const reset = {
+    const reset: ProviderSettings = {
       ...providerSettings,
       openaiApiKey: "",
+      anthropicApiKey: "",
+      geminiApiKey: "",
+      openrouterApiKey: "",
+      xaiApiKey: "",
       ollamaCloudApiKey: "",
+      customApiKey: "",
     };
     setProviderSettings(reset);
     setProviderDraft(reset);
     setProviderError("");
+    setTestResult(null);
   };
 
   const handleClearLogsConfirmed = () => {
@@ -629,15 +612,9 @@ export default function App() {
       version: "2.4.0",
       providerSettings: sanitizeProviderSettingsForExport(providerSettings),
       stage,
-      ritualState: {
-        consciousIntention,
-        symbolObservation,
-        subconsciousPrompt,
-        insightSynthesis,
-      },
+      ritualState: { consciousIntention, symbolObservation, subconsciousPrompt, insightSynthesis },
       sessionLog,
     };
-
     const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -650,106 +627,60 @@ export default function App() {
   const handleSend = async (text: string) => {
     if (!text.trim()) return;
     if (!providerReady) {
-      setProviderError("Configure your active provider before starting AI-guided initiation.");
+      setProviderError("Add an API key or switch to a local provider before invoking the AI guide.");
       setShowAiSettings(true);
       return;
     }
-    if (isLoadingTarotReference) {
-      setProviderError("Tarot reference text is still loading. Try again in a moment.");
-      return;
-    }
-
     setStage("loading");
     setInput("");
     setIsSending(true);
     setProviderError("");
 
-    const userMessage: SessionMessage = {
-      role: "user",
-      content: text.trim(),
-      createdAt: new Date().toISOString(),
-    };
-
+    const userMessage: SessionMessage = { role: "user", content: text.trim(), createdAt: new Date().toISOString() };
     const historyWithUser = [...sessionLog, userMessage];
     setSessionLog(historyWithUser);
     const priorKey = detectTarotKeyNumber(currentMessage);
 
     try {
-      const rawResponse = await sendToProvider(providerSettings, systemInstruction, historyWithUser);
-      const responseText = forceCanonicalTarotImage(rawResponse);
-      const responseKey = detectTarotKeyNumber(responseText.replace(/\[(GATE OPENED|REFLECTION NEEDED)\]/g, "").trim());
-
-      const assistantMessage: SessionMessage = {
-        role: "assistant",
-        content: responseText,
-        createdAt: new Date().toISOString(),
-      };
+      const { reply } = await dispatchProviderChat(providerSettings, systemInstruction, historyWithUser);
+      const responseKey = detectTarotKeyNumber(reply.replace(/\[(GATE OPENED|REFLECTION NEEDED)\]/g, "").trim());
+      const assistantMessage: SessionMessage = { role: "assistant", content: reply, createdAt: new Date().toISOString() };
       setSessionLog((prev) => [...prev, assistantMessage]);
 
-      if (responseText.includes("[REFLECTION NEEDED]")) {
-        const cleaned = responseText.replace(/\[REFLECTION NEEDED\]/g, "").trim();
-        setCurrentMessage(cleaned);
+      if (reply.includes("[REFLECTION NEEDED]")) {
+        setCurrentMessage(reply.replace(/\[REFLECTION NEEDED\]/g, "").trim());
         setStage("reflection_needed");
         const keyToMark = responseKey ?? priorKey;
         if (keyToMark !== null) {
           setProgress((prev) => ({
             ...prev,
-            cards: {
-              ...prev.cards,
-              [keyToMark]: {
-                ...prev.cards[keyToMark],
-                reflectionsNeeded: prev.cards[keyToMark].reflectionsNeeded + 1,
-              },
-            },
+            cards: { ...prev.cards, [keyToMark]: { ...prev.cards[keyToMark], reflectionsNeeded: prev.cards[keyToMark].reflectionsNeeded + 1 } },
           }));
         }
       } else {
-        const cleaned = responseText.replace(/\[GATE OPENED\]/g, "").trim();
-        setCurrentMessage(cleaned);
+        setCurrentMessage(reply.replace(/\[GATE OPENED\]/g, "").trim());
         setStage("lesson");
         setTimeLeft(MEDITATION_TIME_SECONDS);
-
-        if (responseText.includes("[GATE OPENED]") && priorKey !== null) {
+        if (reply.includes("[GATE OPENED]") && priorKey !== null) {
           setProgress((prev) => {
             const nextCards = { ...prev.cards };
-            const previousCard = nextCards[priorKey];
-            nextCards[priorKey] = {
-              ...previousCard,
-              gatesOpened: previousCard.gatesOpened + 1,
-              completed: true,
-            };
-
-            let nextCycles = prev.totalCyclesCompleted;
-            let nextCompletions = prev.cycleCompletions;
-            if (priorKey === 21) {
-              nextCycles += 1;
-              nextCompletions = [...prev.cycleCompletions, new Date().toISOString()];
-            }
-
+            nextCards[priorKey] = { ...nextCards[priorKey], gatesOpened: nextCards[priorKey].gatesOpened + 1, completed: true };
             return {
               cards: nextCards,
-              totalCyclesCompleted: nextCycles,
-              cycleCompletions: nextCompletions,
+              totalCyclesCompleted: priorKey === 21 ? prev.totalCyclesCompleted + 1 : prev.totalCyclesCompleted,
+              cycleCompletions: priorKey === 21 ? [...prev.cycleCompletions, new Date().toISOString()] : prev.cycleCompletions,
             };
           });
         }
-
         if (responseKey !== null) {
           setProgress((prev) => ({
             ...prev,
-            cards: {
-              ...prev.cards,
-              [responseKey]: {
-                ...prev.cards[responseKey],
-                lessonsOpened: prev.cards[responseKey].lessonsOpened + 1,
-              },
-            },
+            cards: { ...prev.cards, [responseKey]: { ...prev.cards[responseKey], lessonsOpened: prev.cards[responseKey].lessonsOpened + 1 } },
           }));
         }
       }
     } catch (error) {
-      console.error("Error sending message:", error);
-      setCurrentMessage("Could not reach the configured AI provider. Verify local Ollama or API settings, or continue in Offline Workbench mode.");
+      setCurrentMessage("Could not reach the active AI provider. Open AI Settings to test/switch providers, or continue in 100% Offline Workbench mode.");
       setStage("reflection_needed");
       setProviderError(error instanceof Error ? error.message : "Request failed.");
     } finally {
@@ -759,29 +690,20 @@ export default function App() {
 
   const handleSubmitInsight = () => {
     if (!canSubmitInsight) return;
-    const structuredResponse = `Ritual context:\n- Conscious Intention: ${consciousIntention.trim()}\n- Symbol Observation: ${symbolObservation.trim()}\n- Subconscious Prompt During Meditation: ${subconsciousPrompt.trim()}\n- Post-Meditation Synthesis: ${insightSynthesis.trim()}\n\nAlchemical answer:\n${input.trim()}`;
+    const structured = `Ritual context:\n- Conscious Intention: ${consciousIntention.trim()}\n- Symbol Observation: ${symbolObservation.trim()}\n- Subconscious Prompt: ${subconsciousPrompt.trim()}\n- Post-Meditation Synthesis: ${insightSynthesis.trim()}\n\nAlchemical answer:\n${input.trim()}`;
     if (currentKeyNumber !== null) {
       setProgress((prev) => ({
         ...prev,
-        cards: {
-          ...prev.cards,
-          [currentKeyNumber]: {
-            ...prev.cards[currentKeyNumber],
-            insightSubmissions: prev.cards[currentKeyNumber].insightSubmissions + 1,
-          },
-        },
+        cards: { ...prev.cards, [currentKeyNumber]: { ...prev.cards[currentKeyNumber], insightSubmissions: prev.cards[currentKeyNumber].insightSubmissions + 1 } },
       }));
     }
-    void handleSend(structuredResponse);
+    void handleSend(structured);
   };
 
   const openSelectedKeyOffline = () => {
     const keyName = TAROT_CARD_NAMES[selectedPreviewKey] ?? "The Fool";
-    const imgPath = TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg";
     const localLesson = [
       `# Key ${selectedPreviewKey}: ${keyName}`,
-      "",
-      `![Key ${selectedPreviewKey}: ${keyName}](${imgPath})`,
       "",
       `### Hermetic & Architectural Correspondence`,
       `- **Hebrew Letter & Gematria:** ${selectedCorrespondence.letter} · ${selectedCorrespondence.gematria}`,
@@ -806,19 +728,68 @@ export default function App() {
       ...prev,
       cards: {
         ...prev.cards,
-        [selectedPreviewKey]: {
-          ...prev.cards[selectedPreviewKey],
-          lessonsOpened: (prev.cards[selectedPreviewKey]?.lessonsOpened ?? 0) + 1,
-        },
+        [selectedPreviewKey]: { ...prev.cards[selectedPreviewKey], lessonsOpened: (prev.cards[selectedPreviewKey]?.lessonsOpened ?? 0) + 1 },
       },
     }));
   };
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+
+  const statusBadge = (status: DiscoveredProvider["status"]) => {
+    if (status === "online") return <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 px-1.5 py-0.5 text-[9px] font-mono">ONLINE</span>;
+    if (status === "cli_ready") return <span className="rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-200 px-1.5 py-0.5 text-[9px] font-mono">CLI READY</span>;
+    if (status === "configured_via_key") return <span className="rounded-full bg-sky-500/15 border border-sky-400/40 text-sky-200 px-1.5 py-0.5 text-[9px] font-mono">API</span>;
+    return <span className="rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 px-1.5 py-0.5 text-[9px] font-mono">OFFLINE</span>;
   };
+
+  const updateDraftModel = (val: string) => {
+    const map: Partial<Record<ProviderId, keyof ProviderSettings>> = {
+      agy_bridge: "agyBridgeModel",
+      ollama_local: "ollamaLocalModel",
+      agy_cli: "agyCliModel",
+      hermes_cli: "hermesCliModel",
+      grok_cli: "grokCliModel",
+      codex_cli: "codexCliModel",
+      claude_code: "claudeCodeModel",
+      openai: "openaiModel",
+      anthropic: "anthropicModel",
+      gemini_api: "geminiModel",
+      openrouter: "openrouterModel",
+      xai_grok: "xaiModel",
+      ollama_cloud: "ollamaCloudModel",
+      custom_openai: "customModel",
+    };
+    const field = map[providerDraft.provider];
+    if (field) setProviderDraft((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const updateDraftKey = (val: string) => {
+    const map: Partial<Record<ProviderId, keyof ProviderSettings>> = {
+      openai: "openaiApiKey",
+      anthropic: "anthropicApiKey",
+      gemini_api: "geminiApiKey",
+      openrouter: "openrouterApiKey",
+      xai_grok: "xaiApiKey",
+      ollama_cloud: "ollamaCloudApiKey",
+      custom_openai: "customApiKey",
+    };
+    const field = map[providerDraft.provider];
+    if (field) setProviderDraft((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const updateDraftBaseUrl = (val: string) => {
+    const map: Partial<Record<ProviderId, keyof ProviderSettings>> = {
+      agy_bridge: "agyBridgeBaseUrl",
+      ollama_local: "ollamaLocalBaseUrl",
+      azoth_local: "azothLocalBaseUrl",
+      ollama_cloud: "ollamaCloudBaseUrl",
+      custom_openai: "customBaseUrl",
+    };
+    const field = map[providerDraft.provider];
+    if (field) setProviderDraft((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const activeProviderDiscovered = discoveredProviders.find((p) => p.id === providerSettings.provider);
 
   return (
     <main className="oracle-shell min-h-[100dvh] text-zinc-50 flex items-center justify-center p-2 sm:p-4 selection:bg-amber-900/40 selection:text-amber-50 relative overflow-hidden">
@@ -844,9 +815,13 @@ export default function App() {
                 setConfirmClearLogs(false);
               }}
               variant="ghost"
-              className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-zinc-200 hover:text-zinc-50 border border-zinc-800/80 sm:border-transparent"
+              className="min-h-[44px] sm:min-h-[36px] h-auto px-3.5 py-2 sm:py-1.5 text-xs text-amber-200 hover:text-amber-100 border border-amber-500/35 bg-amber-500/10"
             >
-              <Settings className="w-3.5 h-3.5 mr-1.5" /> AI Settings ({providerSettings.provider === "ollama_local" ? "Local Ollama" : providerSettings.provider})
+              <Settings className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+              <span>AI: {activeMeta.label} · {activeMeta.model}</span>
+              {activeProviderDiscovered && (
+                <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${activeProviderDiscovered.status === "online" ? "bg-emerald-400" : activeProviderDiscovered.status === "cli_ready" ? "bg-amber-300" : "bg-zinc-500"}`} />
+              )}
             </Button>
             <Button
               onClick={() => {
@@ -876,18 +851,10 @@ export default function App() {
               </Button>
             ) : (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-950/50 px-2 py-0.5">
-                <Button
-                  onClick={handleClearLogsConfirmed}
-                  variant="ghost"
-                  className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-red-200 hover:text-white hover:bg-red-700/60"
-                >
+                <Button onClick={handleClearLogsConfirmed} variant="ghost" className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-red-200 hover:text-white hover:bg-red-700/60">
                   Confirm Clear All
                 </Button>
-                <Button
-                  onClick={() => setConfirmClearLogs(false)}
-                  variant="ghost"
-                  className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-zinc-300 hover:text-white"
-                >
+                <Button onClick={() => setConfirmClearLogs(false)} variant="ghost" className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1 text-xs text-zinc-300 hover:text-white">
                   Cancel
                 </Button>
               </div>
@@ -897,106 +864,167 @@ export default function App() {
 
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
           {showAiSettings && (
-            <section className="border-b border-amber-500/20 bg-zinc-950/90 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[60vh]">
+            <section className="border-b border-amber-500/25 bg-zinc-950/95 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[68vh]">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-amber-300 font-medium">Provider Console (Local-First Default)</h2>
-                <span className="text-[11px] font-mono text-zinc-400">
-                  {ollamaProbeState === "online"
-                    ? `Local Ollama online (${localOllamaModels.length} models)`
-                    : ollamaProbeState === "offline"
-                      ? "Local Ollama offline — offline curriculum remains 100% active"
-                      : "Checking local Ollama..."}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {([
-                  ["ollama_local", "Ollama Local (Default)"],
-                  ["ollama_cloud", "Ollama Cloud"],
-                  ["openai", "OpenAI"],
-                ] as Array<[ProviderId, string]>).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setProviderDraft((prev) => ({ ...prev, provider: id }))}
-                    className={`min-h-[44px] sm:min-h-[36px] rounded-full px-4 py-2 text-xs border transition ${
-                      providerDraft.provider === id
-                        ? "border-amber-300/70 bg-amber-300/15 text-amber-100"
-                        : "border-zinc-700 bg-zinc-900/60 text-zinc-300 hover:text-zinc-100"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                <div>
+                  <h2 className="text-amber-300 font-medium text-sm">AI Provider Connection Hub (15 Local &amp; Cloud Engines)</h2>
+                  <p className="text-[11px] text-zinc-400">Zero API keys required for local agents. Cloud keys stay in localStorage and are always redacted from exports.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void refreshProviders(false)}
+                  disabled={isRefreshingProviders}
+                  className="min-h-[44px] sm:min-h-[34px] h-auto px-3 py-1.5 text-xs text-amber-200 border border-amber-400/30"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isRefreshingProviders ? "animate-spin" : ""}`} />
+                  Refresh Live Status
+                </Button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {providerDraft.provider === "openai" && (
-                  <>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">OpenAI API Key (Never Exported)</span>
-                      <input type="password" value={providerDraft.openaiApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiApiKey: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">OpenAI Model</span>
-                      <input value={providerDraft.openaiModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, openaiModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                  </>
-                )}
-
-                {providerDraft.provider === "ollama_cloud" && (
-                  <>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud API Key (Never Exported)</span>
-                      <input type="password" value={providerDraft.ollamaCloudApiKey} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudApiKey: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud Base URL</span>
-                      <input value={providerDraft.ollamaCloudBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudBaseUrl: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                    <label className="space-y-1 sm:col-span-2">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Cloud Model</span>
-                      <input value={providerDraft.ollamaCloudModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaCloudModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                  </>
-                )}
-
-                {providerDraft.provider === "ollama_local" && (
-                  <>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Local Base URL</span>
-                      <input value={providerDraft.ollamaLocalBaseUrl} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalBaseUrl: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-xs uppercase tracking-[0.15em] text-zinc-400">Local Model</span>
-                      <input value={providerDraft.ollamaLocalModel} onChange={(e) => setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: e.target.value }))} className="w-full min-h-[44px] rounded-lg border border-amber-400/20 bg-zinc-950 px-3 py-2 text-sm" />
-                    </label>
-                    {localOllamaModels.length > 0 && (
-                      <div className="sm:col-span-2 flex flex-wrap gap-1.5 items-center">
-                        <span className="text-[11px] text-zinc-400 mr-1">Detected:</span>
-                        {localOllamaModels.slice(0, 8).map((modelName) => (
-                          <button
-                            key={modelName}
-                            type="button"
-                            onClick={() => setProviderDraft((prev) => ({ ...prev, ollamaLocalModel: modelName }))}
-                            className={`min-h-[36px] px-2.5 py-1 rounded-md text-xs font-mono border ${
-                              providerDraft.ollamaLocalModel === modelName
-                                ? "border-amber-400 bg-amber-500/20 text-amber-200"
-                                : "border-zinc-700 bg-zinc-900 text-zinc-300"
-                            }`}
-                          >
-                            {modelName}
-                          </button>
-                        ))}
+              {/* Group 1: Local Sovereign Agents & Daemons */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-emerald-300">
+                  Group 1 — Local Sovereign Agents &amp; Daemons (Zero API Key)
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {localProviders.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setProviderDraft((prev) => ({ ...prev, provider: p.id }));
+                        setTestResult(null);
+                      }}
+                      className={`min-h-[44px] rounded-xl px-3 py-2 text-left border transition flex flex-col justify-between gap-1 ${
+                        providerDraft.provider === p.id
+                          ? "border-amber-400 bg-amber-500/15 text-amber-100"
+                          : "border-zinc-800 bg-zinc-900/70 text-zinc-200 hover:border-amber-400/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 w-full">
+                        <span className="text-xs font-medium truncate">{p.name}</span>
+                        {statusBadge(p.status)}
                       </div>
-                    )}
-                  </>
+                      <span className="text-[10px] text-zinc-400 truncate w-full">{p.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Group 2: Cloud & Custom APIs */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-sky-300">
+                  Group 2 — Cloud &amp; Custom APIs (Server-Proxied via :8135)
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
+                  {cloudProviders.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setProviderDraft((prev) => ({ ...prev, provider: p.id }));
+                        setTestResult(null);
+                      }}
+                      className={`min-h-[44px] rounded-xl px-2.5 py-2 text-left border transition flex flex-col justify-between gap-1 ${
+                        providerDraft.provider === p.id
+                          ? "border-amber-400 bg-amber-500/15 text-amber-100"
+                          : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-sky-400/40"
+                      }`}
+                    >
+                      <span className="text-xs font-medium truncate">{p.name}</span>
+                      <span className="text-[9px] font-mono text-zinc-400">{p.requiresKey ? "API Key" : "OpenAI URL"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Active Provider Configuration Row */}
+              <div className="rounded-xl border border-amber-400/25 bg-zinc-900/65 p-3.5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-amber-200">
+                    Configure: {draftDiscovered?.name || draftMeta.label}
+                  </span>
+                  {draftDiscovered && statusBadge(draftDiscovered.status)}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {providerDraft.provider !== "azoth_local" && (
+                    <label className="space-y-1">
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">Model</span>
+                      {draftDiscovered && draftDiscovered.models.length > 1 ? (
+                        <select
+                          value={draftMeta.model}
+                          onChange={(e) => updateDraftModel(e.target.value)}
+                          className="w-full min-h-[44px] rounded-lg border border-amber-400/25 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                        >
+                          {Array.from(new Set([draftMeta.model, ...draftDiscovered.models])).map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={draftMeta.model}
+                          onChange={(e) => updateDraftModel(e.target.value)}
+                          className="w-full min-h-[44px] rounded-lg border border-amber-400/25 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                        />
+                      )}
+                    </label>
+                  )}
+
+                  {["agy_bridge", "ollama_local", "azoth_local", "ollama_cloud", "custom_openai"].includes(providerDraft.provider) && (
+                    <label className="space-y-1">
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">Endpoint Base URL</span>
+                      <input
+                        value={draftMeta.baseUrl || ""}
+                        onChange={(e) => updateDraftBaseUrl(e.target.value)}
+                        className="w-full min-h-[44px] rounded-lg border border-amber-400/25 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 font-mono"
+                      />
+                    </label>
+                  )}
+
+                  {["openai", "anthropic", "gemini_api", "openrouter", "xai_grok", "ollama_cloud", "custom_openai"].includes(providerDraft.provider) && (
+                    <label className="space-y-1 sm:col-span-2">
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                        {draftMeta.label} API Key {providerDraft.provider === "custom_openai" ? "(Optional)" : "(Stored Locally · Never Exported)"}
+                      </span>
+                      <input
+                        type="password"
+                        value={draftMeta.apiKey || ""}
+                        onChange={(e) => updateDraftKey(e.target.value)}
+                        placeholder="Paste secret key..."
+                        className="w-full min-h-[44px] rounded-lg border border-amber-400/25 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <Button onClick={handleProviderSave} className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2 rounded-full font-medium">
+                    Activate Provider
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleTestProvider()}
+                    disabled={isTestingProvider}
+                    className="min-h-[44px] h-auto border-emerald-400/40 bg-zinc-950 hover:bg-zinc-900 text-emerald-200 px-4 py-2 rounded-full"
+                  >
+                    <PlugZap className="w-3.5 h-3.5 mr-1.5" />
+                    {isTestingProvider ? "Probing..." : "Test Connection"}
+                  </Button>
+                  <Button onClick={handleClearProviderSecrets} variant="ghost" className="min-h-[44px] h-auto px-4 py-2 text-zinc-300 hover:text-zinc-100">
+                    Clear Cloud Keys
+                  </Button>
+                </div>
+
+                {testResult && (
+                  <div className={`rounded-lg border px-3 py-2 text-xs font-mono ${testResult.ok ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-200" : "border-red-400/40 bg-red-950/40 text-red-200"}`}>
+                    {testResult.ok ? "✔" : "✖"} {testResult.provider} [{testResult.status}] · {testResult.latencyMs} ms — {testResult.detail}
+                  </div>
                 )}
+                {providerError && <p className="text-red-300 text-xs">{providerError}</p>}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handleProviderSave} className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-5 py-2 rounded-full">Apply Provider</Button>
-                <Button onClick={handleClearProviderSecrets} variant="ghost" className="min-h-[44px] h-auto px-4 py-2 text-zinc-300 hover:text-zinc-100">Clear Stored Keys</Button>
-              </div>
-              {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
             </section>
           )}
 
@@ -1014,17 +1042,16 @@ export default function App() {
                 </div>
                 <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-2">
                   <p className="text-[10px] uppercase tracking-wider text-zinc-400">Meditations</p>
-                  <p className="text-lg text-amber-200">{Object.values(progress.cards).reduce((sum, card) => sum + card.meditationsStarted, 0)}</p>
+                  <p className="text-lg text-amber-200">{Object.values(progress.cards).reduce((s, c) => s + c.meditationsStarted, 0)}</p>
                 </div>
                 <div className="rounded-lg border border-amber-400/20 bg-zinc-900/70 p-2">
                   <p className="text-[10px] uppercase tracking-wider text-zinc-400">Reflections</p>
-                  <p className="text-lg text-amber-200">{Object.values(progress.cards).reduce((sum, card) => sum + card.reflectionsNeeded, 0)}</p>
+                  <p className="text-lg text-amber-200">{Object.values(progress.cards).reduce((s, c) => s + c.reflectionsNeeded, 0)}</p>
                 </div>
               </div>
               <div className="max-h-64 overflow-y-auto rounded-lg border border-amber-400/20 bg-zinc-900/50 p-2 space-y-1">
                 {Object.entries(TAROT_CARD_NAMES).map(([key, label]) => {
-                  const keyNum = Number(key);
-                  const card = progress.cards[keyNum];
+                  const card = progress.cards[Number(key)];
                   return (
                     <div key={key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-2 py-1.5">
                       <div>
@@ -1042,15 +1069,13 @@ export default function App() {
           )}
 
           {stage === "welcome" && (
-            <section className="flex-1 overflow-y-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[270px_1fr] gap-3 sm:gap-5 items-start">
+            <section className="flex-1 overflow-y-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3 sm:gap-5 items-start">
               <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-2.5 sm:p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2 px-1">
                   <h2 className="text-[11px] uppercase tracking-[0.14em] text-amber-300 font-medium whitespace-nowrap">
                     22 Major Arcana Deck
                   </h2>
-                  <span className="text-[11px] text-zinc-400 whitespace-nowrap font-mono">
-                    {cardsCompletedCount}/22 Done
-                  </span>
+                  <span className="text-[11px] text-zinc-400 whitespace-nowrap font-mono">{cardsCompletedCount}/22 Done</span>
                 </div>
                 <div className="flex flex-nowrap overflow-x-auto gap-1.5 pb-1.5 lg:grid lg:grid-cols-1 lg:overflow-x-visible lg:overflow-y-auto lg:max-h-[560px] lg:pb-0 lg:pr-1">
                   {Object.entries(TAROT_CARD_NAMES).map(([k, name]) => {
@@ -1081,11 +1106,8 @@ export default function App() {
 
               <div className="rounded-xl border border-amber-400/20 bg-zinc-950/75 p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 items-center sm:items-start">
-                  <img
-                    src={TAROT_IMAGE_PATHS[selectedPreviewKey] ?? "/tarot/fool.jpg"}
-                    alt={`Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey] ?? "Tarot Key"}`}
-                    className="w-36 sm:w-44 aspect-[2/3] rounded-xl border border-amber-400/35 shadow-[0_14px_32px_rgba(0,0,0,0.5)] object-cover shrink-0"
-                  />
+                  <AdytumArcanaCard keyNumber={selectedPreviewKey} size="md" themeMode="dark" showFlipButton />
+
                   <div className="space-y-2.5 text-center sm:text-left flex-1 min-w-0">
                     <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-amber-300">
                       <Sun className="w-3.5 h-3.5" />
@@ -1096,7 +1118,7 @@ export default function App() {
                     </h1>
                     <p className="text-zinc-300/90 leading-relaxed text-sm">
                       {selectedOfflineLesson?.lesson ||
-                        "Active Hermetic & AI Chemistry Workbench. Study this Key offline with the BOTA 5-minute contemplation protocol or connect local Ollama."}
+                        "Active Hermetic & AI Chemistry Workbench. Study this Key offline with the BOTA 5-minute contemplation protocol or dispatch to any connected AI engine."}
                     </p>
                     <div className="flex flex-wrap justify-center sm:justify-start gap-2.5 pt-1">
                       <Button
@@ -1111,17 +1133,13 @@ export default function App() {
                           if (!providerReady) {
                             setShowAiSettings(true);
                           } else {
-                            void handleSend(`Start Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey]}`);
+                            void handleSend(`Guide me through Key ${selectedPreviewKey}: ${TAROT_CARD_NAMES[selectedPreviewKey]} using the BOTA and AI Chemistry framework.`);
                           }
                         }}
                         disabled={isLoadingTarotReference || isSending}
                         className="min-h-[44px] h-auto border-amber-400/35 bg-zinc-900/70 hover:bg-zinc-800 text-amber-200 px-5 py-2.5 text-sm rounded-full"
                       >
-                        {isLoadingTarotReference || isSending
-                          ? "Preparing Guide..."
-                          : providerReady
-                            ? "Run Local AI Guide"
-                            : "Configure AI Provider"}
+                        {isSending ? "Running AI Guide..." : providerReady ? `Run ${activeMeta.label} Guide` : "Configure AI Provider"}
                       </Button>
                     </div>
                     {providerError && <p className="text-red-300 text-sm">{providerError}</p>}
@@ -1193,91 +1211,64 @@ export default function App() {
                 <div className="absolute inset-0 border-2 border-amber-400 rounded-full border-t-transparent animate-spin" />
                 <Moon className="absolute inset-0 m-auto w-6 h-6 text-amber-300 animate-pulse" />
               </div>
-              <p className="text-amber-300/80 animate-pulse tracking-[0.25em] uppercase text-xs sm:text-sm">Consulting Local Guide...</p>
+              <p className="text-amber-300/80 animate-pulse tracking-[0.22em] uppercase text-xs sm:text-sm">
+                Consulting {activeMeta.label} ({activeMeta.model})...
+              </p>
             </section>
           )}
 
           {(stage === "lesson" || stage === "answering" || stage === "reflection_needed") && (
-            <section ref={scrollRef} className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-7 animate-in slide-in-from-bottom-4 duration-500">
+            <section ref={scrollRef} className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-6 animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800/70">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setStage("welcome")}
-                  className="min-h-[44px] h-auto px-3.5 py-2 text-xs text-amber-300 hover:text-amber-200"
-                >
+                <Button size="sm" variant="ghost" onClick={() => setStage("welcome")} className="min-h-[44px] h-auto px-3.5 py-2 text-xs text-amber-300 hover:text-amber-200">
                   <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
                   All 22 Keys (Deck)
                 </Button>
-                <span className="text-[11px] font-mono text-zinc-400">
-                  {currentCardLabel} · {cardsCompletedCount}/22 Complete
-                </span>
+                <span className="text-[11px] font-mono text-zinc-400">{currentCardLabel} · {cardsCompletedCount}/22 Complete</span>
               </div>
+
               {stage === "reflection_needed" && (
-                <div className="bg-red-950/30 border border-red-800/55 rounded-xl p-4 mb-6 flex items-start gap-3">
+                <div className="bg-red-950/30 border border-red-800/55 rounded-xl p-4 flex items-start gap-3">
                   <Lock className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div>
                     <h2 className="text-red-300 font-medium mb-1">The Gate Remains Closed</h2>
-                    <p className="text-red-200/75 text-sm">Your insight requires deeper synthesis or provider configuration. Review the feedback below and continue.</p>
+                    <p className="text-red-200/75 text-sm">Review the guide feedback or provider connection status below and continue.</p>
                   </div>
                 </div>
               )}
 
-              <article className="markdown-body prose prose-sm sm:prose-base prose-invert prose-amber max-w-none prose-img:rounded-xl prose-img:border prose-img:border-amber-400/30 prose-img:shadow-[0_20px_45px_rgba(0,0,0,0.45)] prose-img:max-w-[260px] sm:prose-img:max-w-[300px] prose-img:mx-auto prose-img:my-6 prose-headings:text-amber-300 prose-headings:font-heading prose-headings:tracking-wide prose-strong:text-amber-200 prose-p:leading-relaxed prose-p:text-zinc-300/95 prose-li:text-zinc-300/90">
-                <ReactMarkdown
-                  components={{
-                    img: ({ node, ...props }) => {
-                      const safeSrc = normalizeTarotImageSrc(props.src, props.alt);
-                      return <img {...props} alt={props.alt || currentCardLabel} src={safeSrc ?? props.src} referrerPolicy="no-referrer" />;
-                    },
-                  }}
-                >
-                  {currentMessage}
-                </ReactMarkdown>
-              </article>
+              <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
+                <AdytumArcanaCard keyNumber={currentKeyNumber ?? selectedPreviewKey} size="sm" themeMode="dark" showFlipButton />
+                <article className="flex-1 min-w-0 markdown-body prose prose-sm sm:prose-base prose-invert prose-amber max-w-none prose-headings:text-amber-300 prose-headings:font-heading prose-headings:tracking-wide prose-strong:text-amber-200 prose-p:leading-relaxed prose-p:text-zinc-300/95 prose-li:text-zinc-300/90">
+                  <ReactMarkdown
+                    components={{
+                      img: ({ node, ...props }) => {
+                        const safeSrc = normalizeTarotImageSrc(props.src, props.alt);
+                        return <img {...props} alt={props.alt || currentCardLabel} src={safeSrc ?? props.src} referrerPolicy="no-referrer" className="rounded-xl max-w-[240px]" />;
+                      },
+                    }}
+                  >
+                    {currentMessage}
+                  </ReactMarkdown>
+                </article>
+              </div>
 
               {stage === "lesson" && (
-                <div className="pt-6 pb-4 border-t border-zinc-800/60 mt-6 space-y-5">
+                <div className="pt-6 pb-4 border-t border-zinc-800/60 mt-4 space-y-4">
                   <h3 className="text-amber-300 font-medium tracking-wide">BOTA Practice Protocol</h3>
                   <p className="text-zinc-400 text-sm">Prepare consciousness before meditation, then plant a precise subconscious directive.</p>
 
                   <div className="space-y-2">
-                    <label htmlFor="bota-intention" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
-                      1. Conscious Intention
-                    </label>
-                    <Textarea
-                      id="bota-intention"
-                      value={consciousIntention}
-                      onChange={(e) => setConsciousIntention(e.target.value)}
-                      placeholder="What faculty or architectural pattern are you refining through this key? (min 20 chars)"
-                      className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                    />
+                    <label htmlFor="bota-intention" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">1. Conscious Intention</label>
+                    <Textarea id="bota-intention" value={consciousIntention} onChange={(e) => setConsciousIntention(e.target.value)} placeholder="What faculty or architectural pattern are you refining through this key? (min 20 chars)" className="min-h-[88px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 text-base resize-y" />
                   </div>
-
                   <div className="space-y-2">
-                    <label htmlFor="bota-symbol" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
-                      2. Symbol Observation
-                    </label>
-                    <Textarea
-                      id="bota-symbol"
-                      value={symbolObservation}
-                      onChange={(e) => setSymbolObservation(e.target.value)}
-                      placeholder="Name exact symbols and their functional meaning in your own words. (min 20 chars)"
-                      className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                    />
+                    <label htmlFor="bota-symbol" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">2. Symbol Observation</label>
+                    <Textarea id="bota-symbol" value={symbolObservation} onChange={(e) => setSymbolObservation(e.target.value)} placeholder="Name exact symbols and their functional meaning in your own words. (min 20 chars)" className="min-h-[88px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 text-base resize-y" />
                   </div>
-
                   <div className="space-y-2">
-                    <label htmlFor="bota-directive" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">
-                      3. Subconscious Directive
-                    </label>
-                    <Textarea
-                      id="bota-directive"
-                      value={subconsciousPrompt}
-                      onChange={(e) => setSubconsciousPrompt(e.target.value)}
-                      placeholder="Write one clear seed-thought to hold through the five-minute meditation. (min 20 chars)"
-                      className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                    />
+                    <label htmlFor="bota-directive" className="block text-xs uppercase tracking-[0.18em] text-zinc-300">3. Subconscious Directive</label>
+                    <Textarea id="bota-directive" value={subconsciousPrompt} onChange={(e) => setSubconsciousPrompt(e.target.value)} placeholder="Write one clear seed-thought to hold through the five-minute meditation. (min 20 chars)" className="min-h-[88px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 text-base resize-y" />
                   </div>
 
                   <div className="flex justify-center">
@@ -1286,13 +1277,7 @@ export default function App() {
                         if (currentKeyNumber !== null) {
                           setProgress((prev) => ({
                             ...prev,
-                            cards: {
-                              ...prev.cards,
-                              [currentKeyNumber]: {
-                                ...prev.cards[currentKeyNumber],
-                                meditationsStarted: prev.cards[currentKeyNumber].meditationsStarted + 1,
-                              },
-                            },
+                            cards: { ...prev.cards, [currentKeyNumber]: { ...prev.cards[currentKeyNumber], meditationsStarted: prev.cards[currentKeyNumber].meditationsStarted + 1 } },
                           }));
                         }
                         setTimeLeft(MEDITATION_TIME_SECONDS);
@@ -1300,7 +1285,7 @@ export default function App() {
                         setStage("meditating");
                       }}
                       disabled={!canBeginMeditation}
-                      className="min-h-[48px] h-auto bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-400/35 px-8 py-3.5 text-base rounded-full shadow-[0_0_18px_rgba(245,158,11,0.14)] transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.24)] flex gap-3 items-center disabled:opacity-45"
+                      className="min-h-[48px] h-auto bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-400/35 px-8 py-3.5 text-base rounded-full flex gap-3 items-center disabled:opacity-45"
                     >
                       <Hourglass className="w-5 h-5" />
                       Begin 5-Minute Meditation
@@ -1311,34 +1296,18 @@ export default function App() {
               )}
 
               {(stage === "answering" || stage === "reflection_needed") && (
-                <div className="pt-6 border-t border-zinc-800/60 mt-6 space-y-4 animate-in fade-in duration-500">
+                <div className="pt-6 border-t border-zinc-800/60 mt-4 space-y-4">
                   <h3 className="text-amber-300 font-medium flex items-center gap-2 tracking-wide">
                     <Unlock className="w-4 h-4" />
                     Provide Your Insight
                   </h3>
                   <div className="space-y-2">
-                    <label htmlFor="insight-answer" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">
-                      Alchemical Reflection (40+ chars)
-                    </label>
-                    <Textarea
-                      id="insight-answer"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Record your reflections here..."
-                      className="min-h-[140px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                    />
+                    <label htmlFor="insight-answer" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">Alchemical Reflection (40+ chars)</label>
+                    <Textarea id="insight-answer" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Record your reflections here..." className="min-h-[130px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 text-base resize-y" />
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor="insight-synthesis" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">
-                      Post-Meditation Synthesis (20+ chars)
-                    </label>
-                    <Textarea
-                      id="insight-synthesis"
-                      value={insightSynthesis}
-                      onChange={(e) => setInsightSynthesis(e.target.value)}
-                      placeholder="What idea, pattern, or solution emerged from subconscious incubation?"
-                      className="min-h-[90px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-amber-400/60 focus-visible:border-amber-300/60 text-base resize-y"
-                    />
+                    <label htmlFor="insight-synthesis" className="block text-xs uppercase tracking-[0.16em] text-zinc-300">Post-Meditation Synthesis (20+ chars)</label>
+                    <Textarea id="insight-synthesis" value={insightSynthesis} onChange={(e) => setInsightSynthesis(e.target.value)} placeholder="What idea, pattern, or solution emerged from subconscious incubation?" className="min-h-[88px] bg-zinc-950/85 border-amber-400/20 text-zinc-100 placeholder:text-zinc-500 text-base resize-y" />
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button
@@ -1347,14 +1316,7 @@ export default function App() {
                         if (currentKeyNumber !== null) {
                           setProgress((prev) => ({
                             ...prev,
-                            cards: {
-                              ...prev.cards,
-                              [currentKeyNumber]: {
-                                ...prev.cards[currentKeyNumber],
-                                completed: true,
-                                gatesOpened: prev.cards[currentKeyNumber].gatesOpened + 1,
-                              },
-                            },
+                            cards: { ...prev.cards, [currentKeyNumber]: { ...prev.cards[currentKeyNumber], completed: true, gatesOpened: prev.cards[currentKeyNumber].gatesOpened + 1 } },
                           }));
                         }
                         setStage("welcome");
@@ -1365,16 +1327,11 @@ export default function App() {
                       <CheckCircle2 className="w-4 h-4 mr-1.5" />
                       Save Offline &amp; Complete Key
                     </Button>
-                    <Button
-                      onClick={handleSubmitInsight}
-                      disabled={!canSubmitInsight || isSending}
-                      className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-2.5 rounded-full border border-amber-100/20 disabled:bg-amber-600/50 disabled:text-zinc-300"
-                    >
-                      Submit to AI Guide
+                    <Button onClick={handleSubmitInsight} disabled={!canSubmitInsight || isSending} className="min-h-[44px] h-auto bg-amber-500 hover:bg-amber-400 text-zinc-950 px-6 py-2.5 rounded-full">
+                      Submit to {activeMeta.label}
                       <Send className="w-4 h-4 ml-2" />
                     </Button>
                   </div>
-                  {!canSubmitInsight && <p className="text-zinc-400 text-xs">Complete both reflection (40+ chars) and synthesis (20+ chars) to record your insight.</p>}
                 </div>
               )}
 
@@ -1392,19 +1349,15 @@ export default function App() {
           {stage === "meditating" && (
             <section className="flex-1 flex flex-col items-center justify-center p-4 sm:p-5 bg-zinc-950/85 relative overflow-y-auto animate-in zoom-in-95 duration-500">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.05)_0%,transparent_70%)] pointer-events-none" />
-              <div className="z-10 flex flex-col items-center space-y-4 w-full max-w-md my-auto">
-                <div className="text-center space-y-1.5">
+              <div className="z-10 flex flex-col items-center space-y-3.5 w-full max-w-md my-auto">
+                <div className="text-center space-y-1">
                   <h2 className="text-amber-300 text-lg sm:text-xl font-heading tracking-[0.2em] uppercase">
                     {isMeditationPaused ? "Meditation Paused" : "Sacred Meditation"}
                   </h2>
-                  <p className="text-zinc-300/85 text-xs sm:text-sm">Hold your subconscious directive while observing the image without forcing thought.</p>
+                  <p className="text-zinc-300/85 text-xs sm:text-sm">Hold your subconscious directive while observing the illuminated plate.</p>
                 </div>
 
-                {imageUrl && (
-                  <div className="relative w-36 sm:w-40 rounded-xl overflow-hidden border border-amber-400/35 shadow-[0_0_32px_rgba(245,158,11,0.2)]">
-                    <img src={imageUrl} alt={`${currentCardLabel} Tarot Card`} className="w-full h-auto" referrerPolicy="no-referrer" />
-                  </div>
-                )}
+                <AdytumArcanaCard keyNumber={currentKeyNumber ?? selectedPreviewKey} size="sm" themeMode="dark" showFlipButton={false} />
 
                 <div className="relative">
                   <div className="absolute inset-0 bg-amber-500/12 blur-3xl rounded-full animate-pulse" />
@@ -1418,37 +1371,15 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-2 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsMeditationPaused((p) => !p)}
-                    className="min-h-[44px] px-4 py-2 rounded-full border-amber-400/40 bg-zinc-900 text-amber-200 hover:bg-zinc-800 text-xs"
-                  >
+                  <Button type="button" variant="outline" onClick={() => setIsMeditationPaused((p) => !p)} className="min-h-[44px] px-4 py-2 rounded-full border-amber-400/40 bg-zinc-900 text-amber-200 hover:bg-zinc-800 text-xs">
                     {isMeditationPaused ? <Play className="w-3.5 h-3.5 mr-1.5" /> : <Pause className="w-3.5 h-3.5 mr-1.5" />}
                     {isMeditationPaused ? "Resume Timer" : "Pause Timer"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setIsMeditationPaused(false);
-                      setStage("answering");
-                    }}
-                    className="min-h-[44px] px-4 py-2 rounded-full border-emerald-400/40 bg-zinc-900 text-emerald-200 hover:bg-zinc-800 text-xs"
-                  >
+                  <Button type="button" variant="outline" onClick={() => { setIsMeditationPaused(false); setStage("answering"); }} className="min-h-[44px] px-4 py-2 rounded-full border-emerald-400/40 bg-zinc-900 text-emerald-200 hover:bg-zinc-800 text-xs">
                     <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
                     Complete Early
                   </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsMeditationPaused(false);
-                      setTimeLeft(MEDITATION_TIME_SECONDS);
-                      setStage("lesson");
-                    }}
-                    className="min-h-[44px] px-4 py-2 rounded-full text-zinc-300 hover:text-zinc-100 text-xs"
-                  >
+                  <Button type="button" variant="ghost" onClick={() => { setIsMeditationPaused(false); setTimeLeft(MEDITATION_TIME_SECONDS); setStage("lesson"); }} className="min-h-[44px] px-4 py-2 rounded-full text-zinc-300 hover:text-zinc-100 text-xs">
                     <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
                     Back to Key
                   </Button>
@@ -1461,39 +1392,19 @@ export default function App() {
         <footer className="border-t border-amber-500/20 bg-zinc-950/90 px-3 py-1.5 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 z-10">
           <span className="text-zinc-300 inline-flex flex-wrap items-center gap-x-1">
             <span>100% Free &amp; Open-Access · Engineered by</span>
-            <a
-              href="https://github.com/1nc0gn30"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5"
-            >
+            <a href="https://github.com/1nc0gn30" target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5">
               Neal Frazier Tech (@1nc0gn30)
             </a>
             <span>•</span>
-            <a
-              href="https://nullai.tech"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5"
-            >
+            <a href="https://nullai.tech" target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[44px] sm:min-h-[28px] text-amber-300 hover:underline px-0.5">
               NullAI Platform
             </a>
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href="https://github.com/1nc0gn30/adytum-alchemist-ai-workflow"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center min-h-[44px] sm:min-h-[28px] px-2 text-zinc-300 hover:text-amber-200 underline-offset-2 hover:underline"
-            >
+            <a href="https://github.com/1nc0gn30/adytum-alchemist-ai-workflow" target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[44px] sm:min-h-[28px] px-2 text-zinc-300 hover:text-amber-200 underline-offset-2 hover:underline">
               GitHub
             </a>
-            <a
-              href="https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center min-h-[44px] sm:min-h-[30px] rounded-full border border-amber-400/35 bg-amber-500/10 px-3 py-1 text-amber-200 hover:bg-amber-500/20"
-            >
+            <a href="https://buy.stripe.com/3cIfZg27PdKo2D64Ocfw40X" target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[44px] sm:min-h-[30px] rounded-full border border-amber-400/35 bg-amber-500/10 px-3 py-1 text-amber-200 hover:bg-amber-500/20">
               ☕ Buy Us a Coffee
             </a>
             <span className="font-mono text-[10px] text-zinc-400 break-all" title="Solana Tip Address">

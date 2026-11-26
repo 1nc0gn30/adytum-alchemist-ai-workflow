@@ -167,3 +167,54 @@ def test_api_validate_negation_aware_and_harden(live_server):
     assert h_data["audit"]["score"] == 100
     assert "with no tests" not in h_data["hardened"].lower()
     assert "mock_production" not in h_data["hardened"].lower()
+
+
+def test_api_providers_discovery_and_probe(live_server):
+    status, _, raw = _req(live_server, "GET", "/api/providers")
+    assert status == 200
+    data = json.loads(raw)
+    ids = {p["id"] for p in data["providers"]}
+    for required in (
+        "agy_bridge",
+        "ollama_local",
+        "azoth_local",
+        "agy_cli",
+        "hermes_cli",
+        "grok_cli",
+        "codex_cli",
+        "claude_code",
+        "openai",
+        "anthropic",
+        "gemini_api",
+        "openrouter",
+        "xai_grok",
+        "ollama_cloud",
+        "custom_openai",
+    ):
+        assert required in ids, f"Missing provider {required}"
+
+    # Reject invalid shell-injection model names on /api/chat
+    bad_status, _, bad_raw = _req(
+        live_server,
+        "POST",
+        "/api/chat",
+        body=json.dumps({
+            "provider": "agy_cli",
+            "model": "gemini; rm -rf /",
+            "messages": [{"role": "user", "content": "hi"}],
+        }),
+    )
+    assert bad_status == 400
+    assert "Invalid model" in bad_raw
+
+    # Reject missing API key cleanly on cloud provider test
+    t_status, _, t_raw = _req(
+        live_server,
+        "POST",
+        "/api/providers/test",
+        body=json.dumps({"provider": "anthropic", "apiKey": ""}),
+    )
+    assert t_status == 200
+    t_data = json.loads(t_raw)
+    assert t_data["ok"] is False
+    assert t_data["status"] == "missing_key"
