@@ -43,6 +43,31 @@ export const ARCANA_CARD_CATALOG: Record<number, ArcanaCardMeta> = {
   21: { keyNumber: 21, roman: "XXI", name: "The World", subtitle: "Sovereign Wholeness", hebrew: "ת", letterName: "Tav", gematria: 400, element: "Earth", gate: "Saturn / Crown", guardian: "THOTH", phase: "Hermetic Sovereign Wholeness & Zero-Egress Proof", directive: "Seal the compiled artifact, emit deterministic manifest, and ship 100% open-access." },
 };
 
+const CLASSIC_TAROT_PATHS: Record<number, string> = {
+  0: "/tarot/classic/fool.jpg",
+  1: "/tarot/classic/magician.jpg",
+  2: "/tarot/classic/highpriestess.jpg",
+  3: "/tarot/classic/empress.jpg",
+  4: "/tarot/classic/emperor.jpg",
+  5: "/tarot/classic/hierorphant.jpg",
+  6: "/tarot/classic/lovers.jpg",
+  7: "/tarot/classic/chariot.jpg",
+  8: "/tarot/classic/strength.jpg",
+  9: "/tarot/classic/hermit.jpg",
+  10: "/tarot/classic/wheeloffortune.jpg",
+  11: "/tarot/classic/justice.jpg",
+  12: "/tarot/classic/hangedman.jpg",
+  13: "/tarot/classic/death.jpg",
+  14: "/tarot/classic/temperance.jpg",
+  15: "/tarot/classic/devil.jpg",
+  16: "/tarot/classic/tower.jpg",
+  17: "/tarot/classic/star.jpg",
+  18: "/tarot/classic/moon.jpg",
+  19: "/tarot/classic/sun.jpg",
+  20: "/tarot/classic/judgement.jpg",
+  21: "/tarot/classic/world.jpg",
+};
+
 const ELEMENT_COLORS: Record<ArcanaElement, { glow: string; stroke: string; badgeText: string; badgeBorder: string }> = {
   Air: { glow: "rgba(56, 189, 248, 0.24)", stroke: "#7DD3FC", badgeText: "#BAE6FD", badgeBorder: "rgba(125, 211, 252, 0.45)" },
   Fire: { glow: "rgba(249, 115, 22, 0.24)", stroke: "#FDBA74", badgeText: "#FED7AA", badgeBorder: "rgba(253, 186, 116, 0.45)" },
@@ -493,9 +518,9 @@ export default function AdytumArcanaCard({
             </div>
           </div>
 
-          {/* BACKPLATE (ENGRAVED HERMETIC DOSSIER) */}
+          {/* BACKPLATE (CLASSIC OG BOTA TAROT ARTWORK + HERMETIC PLAQUE) */}
           <div
-            className="absolute inset-0 rounded-[18px] p-3 flex flex-col justify-between overflow-hidden"
+            className="absolute inset-0 rounded-[18px] p-2.5 flex flex-col justify-between overflow-hidden"
             style={{
               background: shellBg,
               border: "1.5px solid rgba(212, 175, 55, 0.72)",
@@ -504,38 +529,29 @@ export default function AdytumArcanaCard({
             }}
           >
             <div className="pointer-events-none absolute inset-1.5 rounded-[13px] border border-amber-400/25" />
-            <div className="relative z-10 text-center border-b border-amber-400/25 pb-2">
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-300/85">
-                Key {meta.keyNumber} · {meta.roman} Backplate
-              </p>
-              <p className="font-heading text-sm font-semibold text-amber-200 mt-0.5 truncate">
-                {meta.name}
-              </p>
-            </div>
 
-            <div className="relative z-10 space-y-1.5 text-[11px] my-auto">
-              <div className="flex justify-between gap-2 border-b border-zinc-800/80 pb-1">
-                <span className="text-zinc-400 font-mono text-[10px]">HEBREW</span>
-                <span className="text-amber-200 font-medium">{meta.letterName} ({meta.hebrew}) · {meta.gematria}</span>
-              </div>
-              <div className="flex justify-between gap-2 border-b border-zinc-800/80 pb-1">
-                <span className="text-zinc-400 font-mono text-[10px]">GATE</span>
-                <span className="text-zinc-200 text-right truncate">{meta.gate}</span>
-              </div>
-              <div className="flex justify-between gap-2 border-b border-zinc-800/80 pb-1">
-                <span className="text-zinc-400 font-mono text-[10px]">GUARDIAN</span>
-                <span className="font-mono text-emerald-300">{meta.guardian}</span>
-              </div>
-              <div className="pt-1">
-                <p className="text-[9.5px] font-mono uppercase tracking-wider text-amber-300/90">{meta.phase}</p>
-                <p className="text-[10.5px] text-zinc-300 leading-snug mt-1">{meta.directive}</p>
-              </div>
-            </div>
-
-            <div className="relative z-10 text-center pt-1.5 border-t border-amber-400/20">
-              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-zinc-400">
-                Adytum Planner · v2.4.0
+            <div className="relative z-10 flex items-center justify-between gap-1 rounded-lg border border-amber-400/30 bg-zinc-950/90 px-2.5 py-1">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-amber-300">
+                Classic BOTA · {meta.roman}
               </span>
+              <span className="font-mono text-[9.5px] text-emerald-300">
+                {meta.guardian}
+              </span>
+            </div>
+
+            <div className="relative z-10 flex-1 my-1.5 rounded-xl border border-amber-400/35 bg-zinc-950/90 p-1.5 flex items-center justify-center overflow-hidden">
+              <img
+                src={CLASSIC_TAROT_PATHS[meta.keyNumber] ?? "/tarot/classic/fool.jpg"}
+                alt={`Classic BOTA Tarot Key ${meta.keyNumber}: ${meta.name}`}
+                className="h-full w-auto max-w-full object-contain rounded-lg shadow-[0_8px_22px_rgba(0,0,0,0.65)]"
+                style={{ imageRendering: "auto" }}
+              />
+            </div>
+
+            <div className="relative z-10 rounded-lg border border-amber-400/30 bg-zinc-950/90 px-2 py-1.5 text-center">
+              <p className="font-mono text-[9.5px] text-amber-200 truncate">
+                {meta.letterName} ({meta.hebrew}) · {meta.gematria} · {meta.gate}
+              </p>
             </div>
           </div>
         </div>
